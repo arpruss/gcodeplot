@@ -36,7 +36,6 @@ class Scale(object):
     def fit(self, plotter, xyMin, xyMax):
         s = [0,0]
         o = [0,0]
-        print(xyMin,xyMax)
         for i in range(2):
             delta = xyMax[i]-xyMin[i]
             if delta == 0:
@@ -49,8 +48,8 @@ class Scale(object):
     def scalePoint(self, point):
         return (point[0]*self.scale[0]+self.offset[0], point[1]*self.scale[1]+self.offset[1])
         
-def emitGcode(commands, penDownZ = 10.0, penUpZ = 15.0, scale = Scale(), 
-        penDownSpeed = 25, penUpSpeed = 50, pauses=True, plotter=Plotter(), autoScale=SCALE_NONE,
+def emitGcode(commands, penDownZ = 13.8, penUpZ = 20, scale = Scale(), 
+        fastSpeed = 50, penDownSpeed = 35, penUpSpeed = 40, pauses=True, plotter=Plotter(), autoScale=SCALE_NONE,
         pause = False):
 
     xyMin = [float("inf"),float("inf")]
@@ -83,8 +82,13 @@ def emitGcode(commands, penDownZ = 10.0, penUpZ = 15.0, scale = Scale(),
     gcode.append('G0 S1 E0')
     gcode.append('G1 S1 E0')
     gcode.append('G21 (millimeters)')
-    
+
     gcode.append('G28 (Home)')
+    penDown = False
+    gcode.append('G1 Z%.3f (pen up)' % penUpZ)
+    gcode.append('G1 F%.1f Y%.3f' % (fastSpeed,plotter.xyMin[1]))
+    gcode.append('G1 F%.1f X%.3f' % (fastSpeed,plotter.xyMin[0]))
+    
 
     for c in commands:
         if c.command == Command.MOVE_PENUP:
@@ -128,7 +132,8 @@ def parseHPGL(file):
     return commands
     
 if __name__ == '__main__':
-    drawing = emitGcode(parseHPGL(sys.argv[1]), autoScale=True, pause=True)
+    plotter = Plotter(xyMin=(60.,20.),xyMax=(160.,120.))
+    drawing = emitGcode(parseHPGL(sys.argv[1]), autoScale=SCALE_BEST, pause=False, plotter=plotter)
     if drawing is not None:
         print(drawing)
        
