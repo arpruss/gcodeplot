@@ -93,7 +93,7 @@ def dedup(commands):
 
     return newCommands
         
-def emitGcode(commands, scale = Scale(), plotter=Plotter(), scalingMode=SCALE_NONE, tolerance = 0, pause = False):
+def emitGcode(commands, scale = Scale(), plotter=Plotter(), scalingMode=SCALE_NONE, tolerance = 0):
 
     xyMin = [float("inf"),float("inf")]
     xyMax = [float("-inf"),float("-inf")]
@@ -174,8 +174,8 @@ def emitGcode(commands, scale = Scale(), plotter=Plotter(), scalingMode=SCALE_NO
     penUp()
     
     sys.stderr.write('Estimated time %dm %.1fs\n' % (state.time // 60, state.time % 60))
-    
-    return ('\n@pause\n' if pause else '\n').join(gcode)
+
+    return gcode
     
 def parseHPGL(file,dpi=(1016.,1016.)):
     try:
@@ -207,17 +207,40 @@ def parseHPGL(file,dpi=(1016.,1016.)):
             elif len(cmd) > 0:
                 sys.stderr.write('Unknown command '+cmd+'\n')
     return commands
+
+def sendGcode(port, speed, plotter, commands, quiet = False):
+    import serial
+    import time
+    
+    s = serial.Serial(port, 115200)
+    s.write('\r\n\r\n')
+    time.sleep(2)
+    s.flushInput()
+    
+    for command in commands:
+        sys.stderr.write(command)
+        r = s.readline()
+        sys.stderr.write(' --> ' + r.strip() + '\n')
+        if not r.startswith('ok'):
+            sys.stderr.write('\nProblem sending data.\n')
+            s.write('G0 Z%.3f\n' % plotter.penUpZ)
+            s.close()
+            return
+            
+    s.close()
     
 if __name__ == '__main__':
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "rfdma:D:t:", ["--allow-repeats", "--scale-to-fit",
-                        "--scale-down", "--scale-manual", "--area=", '--input-dpi=', '--tolerance='], )
+        opts, args = getopt.getopt(sys.argv[1:], "rfdma:D:t:s:S:", ["--allow-repeats", "--scale-to-fit",
+                        "--scale-down", "--scale-manual", "--area=", '--input-dpi=', '--tolerance=', '--send=', '--send-speed='], )
         if len(args) != 1:
             raise getopt.GetoptError("invalid commandline")
 
         tolerance = 0
         doDedup = True    
         scale = Scale()
+        sendPort = None
+        sendSpeed = 115200
         scalingMode = SCALE_BEST
         plotter = Plotter(xyMin=(60.,20.),xyMax=(160.,120.))
         dpi = (1016., 1016.)
@@ -233,6 +256,10 @@ if __name__ == '__main__':
                 scalingMode = SCALE_NONE
             elif opt in ('-t', '--tolerance'):
                 tolerance = float(arg)
+            elif opt in ('-s', '--send'):
+                sendPort = arg
+            elif opt in ('-S', '--send-speed'):
+                sendSpeed = int(arg)
             elif opt in ('-a','--area'):
                 v = map(float, arg.split(','))
                 plotter.xyMin = (v[0],v[1])
@@ -260,8 +287,14 @@ if __name__ == '__main__':
     commands = parseHPGL(args[0], dpi=dpi)
     if doDedup:
         commands = dedup(commands)
-    drawing = emitGcode(dedup(commands), scale=scale, scalingMode=scalingMode, pause=False, tolerance=tolerance, plotter=plotter)
-    if drawing is not None:
-        print(drawing)
+    g = emitGcode(dedup(commands), scale=scale, scalingMode=scalingMode, tolerance=tolerance, plotter=plotter)
+    if len(g)>0:
+        if sendPort is not None:
+            sendGcode(sendPort, 115200, g)
+        else:    
+            print(''.join(g))
+    else:
+        sys.stderr.write("No points.")
+        sys.exit(1)
 
        
