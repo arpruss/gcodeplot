@@ -2,6 +2,7 @@
 import re
 import sys
 import getopt
+import math
 
 SCALE_NONE = 0
 SCALE_DOWN_ONLY = 1
@@ -16,10 +17,11 @@ class Command(object):
         self.point = point
         
     def __repr__(self):
-        return str(self.command)+','+str(self.point)
+        return '('+str(self.command)+','+str(self.point)+')'
         
 class Plotter(object):
-    def __init__(self, xyMin=(0.,0.), xyMax=(200.,200.), drawSpeed=35, moveSpeed=40, fastMoveSpeed=50, penDownZ = 13.8, penUpZ = 20):
+    def __init__(self, xyMin=(0.,0.), xyMax=(200.,200.), 
+            drawSpeed=35, moveSpeed=40, fastMoveSpeed=50, zSpeed=6, penDownZ = 13.8, penUpZ = 20):
         self.xyMin = xyMin
         self.xyMax = xyMax
         self.drawSpeed = drawSpeed
@@ -27,6 +29,7 @@ class Plotter(object):
         self.fastMoveSpeed = fastMoveSpeed
         self.penDownZ = penDownZ
         self.penUpZ = penUpZ
+        self.zSpeed = zSpeed # currently only for measuring
         
     def inRange(self, point):
         for i in range(2):
@@ -90,7 +93,7 @@ def dedup(commands):
 
     return newCommands
         
-def emitGcode(commands, scale = Scale(), plotter=Plotter(), scalingMode=SCALE_NONE, pause = False):
+def emitGcode(commands, scale = Scale(), plotter=Plotter(), scalingMode=SCALE_NONE, tolerance = 0, pause = False):
 
     xyMin = [float("inf"),float("inf")]
     xyMax = [float("-inf"),float("-inf")]
@@ -117,36 +120,61 @@ def emitGcode(commands, scale = Scale(), plotter=Plotter(), scalingMode=SCALE_NO
         scale.fit(plotter, xyMin, xyMax)
         
     gcode = []
-    penDown = None
-    
+
     gcode.append('G0 S1 E0')
     gcode.append('G1 S1 E0')
     gcode.append('G21 (millimeters)')
 
     gcode.append('G28 (Home)')
-    penDown = False
     gcode.append('G1 Z%.3f (pen up)' % plotter.penUpZ)
+
     gcode.append('G1 F%.1f Y%.3f' % (plotter.fastMoveSpeed,plotter.xyMin[1]))
     gcode.append('G1 F%.1f X%.3f' % (plotter.fastMoveSpeed,plotter.xyMin[0]))
     
+    class State(object):
+        pass
+        
+    state = State()
+    state.curXY = plotter.xyMin
+    state.time = (plotter.xyMin[1]+plotter.xyMin[0]) / plotter.fastMoveSpeed
+    state.penDown = False
+    
+    def distance(a,b):
+        return math.hypot(a[0]-b[0],a[1]-b[1])
+    
+    def penUp():
+        if state.penDown is not False:
+            gcode.append('G0 Z%.3f (pen up)' % plotter.penUpZ)
+            state.time += abs(plotter.penUpZ-plotter.penDownZ) / plotter.zSpeed
+            state.penDown = False
+        
+    def penDown():
+        if state.penDown is not True:
+            gcode.append('G0 Z%.3f (pen down)' % plotter.penDownZ)
+            state.time += abs(plotter.penUpZ-plotter.penDownZ) / plotter.zSpeed
+            state.penDown = True
+
+    def penMove(down, speed, p):
+        d = distance(state.curXY, p)
+        if d > tolerance:
+            if (down):
+                penDown()
+            else:
+                penUp()
+            gcode.append('G1 F%.1f X%.3f Y%.3f' % (speed*60., p[0], p[1]))
+            state.curXY = p
+            state.time += d / speed
 
     for c in commands:
         if c.command == Command.MOVE_PEN_UP:
-            if penDown is not False:
-                gcode.append('G0 Z%.3f (pen up)' % plotter.penUpZ)
-                penDown = False
-            if c.point is not None:
-                s = scale.scalePoint(c.point)
-                gcode.append('G1 F%.1f X%.3f Y%.3f' % (plotter.moveSpeed*60., s[0], s[1]))
+            penMove(False, plotter.moveSpeed, scale.scalePoint(c.point))
         elif c.command == Command.MOVE_PEN_DOWN:
-            if penDown is not True:
-                gcode.append('G1 Z%.3f (pen down)' % plotter.penDownZ)
-                penDown = True
-            if c.point is not None:
-                s = scale.scalePoint(c.point)
-                gcode.append('G1 F%.1f X%.3f Y%.3f' % (plotter.drawSpeed*60., s[0], s[1]))
-    if penDown is not False:
-        gcode.append('G0 Z%.3f (pen up)' % plotter.penUpZ)
+            penMove(True, plotter.drawSpeed, scale.scalePoint(c.point))
+
+    penUp()
+    
+    sys.stderr.write('Estimated time %dm %.1fs\n' % (state.time // 60, state.time % 60))
+    
     return ('\n@pause\n' if pause else '\n').join(gcode)
     
 def parseHPGL(file,dpi=(1016.,1016.)):
@@ -160,16 +188,20 @@ def parseHPGL(file,dpi=(1016.,1016.)):
         for cmd in re.sub(r'\s',r'',f.read()).split(';'):
             if cmd.startswith('PD'):
                 try:
-                    x,y = map(float, cmd[2:].split(',',2))
-                    commands.append(Command(Command.MOVE_PEN_DOWN, point=(x*scale[0], y*scale[1])))
+                    coords = map(float, cmd[2:].split(','))
+                    for i in range(0,len(coords),2):
+                        commands.append(Command(Command.MOVE_PEN_DOWN, point=(coords[i]*scale[0], coords[i+1]*scale[1])))
                 except:
-                    commands.append(Command(Command.MOVE_PEN_DOWN))
+                    pass 
+                    # ignore no-movement PD/PU
             elif cmd.startswith('PU'):
                 try:
-                    x,y = map(float, cmd[2:].split(',',2))
-                    commands.append(Command(Command.MOVE_PEN_UP, point=(x*scale[0], y*scale[1])))
+                    coords = map(float, cmd[2:].split(','))
+                    for i in range(0,len(coords),2):
+                        commands.append(Command(Command.MOVE_PEN_UP, point=(coords[i]*scale[0], coords[i+1]*scale[1])))
                 except:
-                    commands.append(Command(Command.MOVE_PEN_UP))
+                    pass 
+                    # ignore no-movement PD/PU
             elif cmd.startswith('IN'):
                 commands.append(Command(Command.INIT))
             elif len(cmd) > 0:
@@ -178,11 +210,12 @@ def parseHPGL(file,dpi=(1016.,1016.)):
     
 if __name__ == '__main__':
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "rfdma:D:", ["--allow-repeats", "--scale-to-fit",
-                        "--scale-down", "--scale-manual", "--area=", '--input-dpi='], )
+        opts, args = getopt.getopt(sys.argv[1:], "rfdma:D:t:", ["--allow-repeats", "--scale-to-fit",
+                        "--scale-down", "--scale-manual", "--area=", '--input-dpi=', '--tolerance='], )
         if len(args) != 1:
             raise getopt.GetoptError("invalid commandline")
 
+        tolerance = 0
         doDedup = True    
         scale = Scale()
         scalingMode = SCALE_BEST
@@ -198,6 +231,8 @@ if __name__ == '__main__':
                 scalingMode = SCALE_DOWN_ONLY
             elif opt in ('-m','--scale-manual'):
                 scalingMode = SCALE_NONE
+            elif opt in ('-t', '--tolerance'):
+                tolerance = float(arg)
             elif opt in ('-a','--area'):
                 v = map(float, arg.split(','))
                 plotter.xyMin = (v[0],v[1])
@@ -218,14 +253,14 @@ if __name__ == '__main__':
  -m|--scale-manual: no scaling
  -a|--area=x1,y1,x2,y2: print area in millimeters [default: 0,0,200,200]
  -D|--input-dpi=xdpi[,ydpi]: hpgl dpi
+ -t|--toerance=x: skip moves of x millimeters or less
 """)
         sys.exit(2)
         
     commands = parseHPGL(args[0], dpi=dpi)
     if doDedup:
         commands = dedup(commands)
-        
-    drawing = emitGcode(dedup(commands), scale=scale, scalingMode=scalingMode, pause=False, plotter=plotter)
+    drawing = emitGcode(dedup(commands), scale=scale, scalingMode=scalingMode, pause=False, tolerance=tolerance, plotter=plotter)
     if drawing is not None:
         print(drawing)
 
