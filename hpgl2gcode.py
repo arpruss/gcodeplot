@@ -272,15 +272,18 @@ if __name__ == '__main__':
                     dpi = (v[0],v[0])
         
     except getopt.GetoptError:
-        print("hpgl2gcode.py [options] inputfile > output.gcode")
+        print("hpgl2gcode.py [options] inputfile [> output.gcode]")
         print("""
+ -h|--help: this
  -r|--allow-repeats: do not deduplicate paths [default: off]
  -f|--scale-to-fit: scale to fit plotter area [default]
  -d|--scale-down: scale to fit plotter area only if too big
  -m|--scale-manual: no scaling
  -a|--area=x1,y1,x2,y2: print area in millimeters [default: 0,0,200,200]
  -D|--input-dpi=xdpi[,ydpi]: hpgl dpi
- -t|--toerance=x: skip moves of x millimeters or less
+ -t|--tolerance=x: skip moves of x millimeters or less
+ -s|--send=port: send gcode to port instead of stdout
+ -S|--send-speed=baud: set baud rate for sending
 """)
         sys.exit(2)
         
