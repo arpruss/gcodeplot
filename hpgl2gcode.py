@@ -7,8 +7,8 @@ SCALE_BEST = 2
 
 class Command(object):
     INIT = 0
-    MOVE_PENUP = 1
-    MOVE_PENDOWN = 2
+    MOVE_PEN_UP = 1
+    MOVE_PEN_DOWN = 2
     def __init__(self, command, point=None):
         self.command = command
         self.point = point
@@ -47,6 +47,38 @@ class Scale(object):
         
     def scalePoint(self, point):
         return (point[0]*self.scale[0]+self.offset[0], point[1]*self.scale[1]+self.offset[1])
+
+def dedup(commands):
+    newCommands = []
+    curPoint = None
+    draws = set()
+    
+    dups = 0
+    cons = 0
+    
+    def d2(a,b):
+        return (a[0]-b[0])**2+(a[1]-b[1])**2
+    
+    for c in commands:
+        if c.command == Command.MOVE_PEN_DOWN and curPoint is not None:
+            draw = (curPoint, c.point)
+            if draw in draws or (c.point, curPoint) in draws:
+                dups += 1
+                c = Command(Command.MOVE_PEN_UP, point=c.point) 
+            else:
+                draws.add(draw)
+
+        if (c.command == Command.MOVE_PEN_UP and len(newCommands) > 0 and 
+                newCommands[-1].command == Command.MOVE_PEN_UP):
+            cons += 1
+            newCommands[-1] = c
+        else:
+            newCommands.append(c)
+            
+        if c.point is not None and (c.command == Command.MOVE_PEN_DOWN or c.command == Command.MOVE_PEN_UP):
+            curPoint = c.point
+
+    return newCommands
         
 def emitGcode(commands, penDownZ = 13.8, penUpZ = 20, scale = Scale(), 
         fastSpeed = 50, penDownSpeed = 35, penUpSpeed = 40, pauses=True, plotter=Plotter(), autoScale=SCALE_NONE,
@@ -91,14 +123,14 @@ def emitGcode(commands, penDownZ = 13.8, penUpZ = 20, scale = Scale(),
     
 
     for c in commands:
-        if c.command == Command.MOVE_PENUP:
+        if c.command == Command.MOVE_PEN_UP:
             if penDown is not False:
                 gcode.append('G0 Z%.3f (pen up)' % penUpZ)
                 penDown = False
             if c.point is not None:
                 s = scale.scalePoint(c.point)
                 gcode.append('G1 F%.1f X%.3f Y%.3f' % (penUpSpeed*60., s[0], s[1]))
-        elif c.command == Command.MOVE_PENDOWN:
+        elif c.command == Command.MOVE_PEN_DOWN:
             if penDown is not True:
                 gcode.append('G1 Z%.3f (pen down)' % penDownZ)
                 penDown = True
@@ -116,15 +148,15 @@ def parseHPGL(file):
             if cmd.startswith('PD'):
                 try:
                     x,y = map(float, cmd[2:].split(',',2))
-                    commands.append(Command(Command.MOVE_PENDOWN, point=(x/40., y/40.)))
+                    commands.append(Command(Command.MOVE_PEN_DOWN, point=(x/40., y/40.)))
                 except:
-                    commands.append(Command(Command.MOVE_PENDOWN))
+                    commands.append(Command(Command.MOVE_PEN_DOWN))
             elif cmd.startswith('PU'):
                 try:
                     x,y = map(float, cmd[2:].split(',',2))
-                    commands.append(Command(Command.MOVE_PENUP, point=(x/40., y/40.)))
+                    commands.append(Command(Command.MOVE_PEN_UP, point=(x/40., y/40.)))
                 except:
-                    commands.append(Command(Command.MOVE_PENUP))
+                    commands.append(Command(Command.MOVE_PEN_UP))
             elif cmd.startswith('IN'):
                 commands.append(Command(Command.INIT))
             elif len(cmd) > 0:
@@ -133,7 +165,7 @@ def parseHPGL(file):
     
 if __name__ == '__main__':
     plotter = Plotter(xyMin=(60.,20.),xyMax=(160.,120.))
-    drawing = emitGcode(parseHPGL(sys.argv[1]), autoScale=SCALE_BEST, pause=False, plotter=plotter)
+    drawing = emitGcode(dedup(parseHPGL(sys.argv[1])), autoScale=SCALE_BEST, pause=False, plotter=plotter)
     if drawing is not None:
         print(drawing)
        
