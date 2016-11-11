@@ -20,8 +20,8 @@ class Command(object):
         return '('+str(self.command)+','+str(self.point)+')'
         
 class Plotter(object):
-    def __init__(self, xyMin=(0.,0.), xyMax=(200.,200.), 
-            drawSpeed=35, moveSpeed=40, fastMoveSpeed=50, zSpeed=6, penDownZ = 13.8, penUpZ = 20):
+    def __init__(self, xyMin=(10,8), xyMax=(192,150), 
+            drawSpeed=35, moveSpeed=40, fastMoveSpeed=50, zSpeed=20, penDownZ = 23, penUpZ = 29):
         self.xyMin = xyMin
         self.xyMax = xyMax
         self.drawSpeed = drawSpeed
@@ -128,8 +128,8 @@ def emitGcode(commands, scale = Scale(), plotter=Plotter(), scalingMode=SCALE_NO
     gcode.append('G28 (Home)')
     gcode.append('G1 Z%.3f (pen up)' % plotter.penUpZ)
 
-    gcode.append('G1 F%.1f Y%.3f' % (plotter.fastMoveSpeed,plotter.xyMin[1]))
-    gcode.append('G1 F%.1f X%.3f' % (plotter.fastMoveSpeed,plotter.xyMin[0]))
+    gcode.append('G1 F%.1f Y%.3f' % (plotter.fastMoveSpeed*60.,plotter.xyMin[1]))
+    gcode.append('G1 F%.1f X%.3f' % (plotter.fastMoveSpeed*60.,plotter.xyMin[0]))
     
     class State(object):
         pass
@@ -220,6 +220,8 @@ def sendGcode(port, speed, plotter, commands, quiet = False):
     for command in commands:
         sys.stderr.write(command)
         r = s.readline()
+        while r.startswith('wait'):
+            r = s.readline()
         sys.stderr.write(' --> ' + r.strip() + '\n')
         if not r.startswith('ok'):
             sys.stderr.write('\nProblem sending data.\n')
@@ -242,7 +244,7 @@ if __name__ == '__main__':
         sendPort = None
         sendSpeed = 115200
         scalingMode = SCALE_BEST
-        plotter = Plotter(xyMin=(60.,20.),xyMax=(160.,120.))
+        plotter = Plotter()
         dpi = (1016., 1016.)
             
         for opt,arg in opts:
@@ -293,9 +295,9 @@ if __name__ == '__main__':
     g = emitGcode(dedup(commands), scale=scale, scalingMode=scalingMode, tolerance=tolerance, plotter=plotter)
     if len(g)>0:
         if sendPort is not None:
-            sendGcode(sendPort, 115200, g)
+            sendGcode(sendPort, 115200, plotter, g)
         else:    
-            print(''.join(g))
+            print('\n'.join(g))
     else:
         sys.stderr.write("No points.")
         sys.exit(1)
