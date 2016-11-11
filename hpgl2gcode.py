@@ -21,7 +21,7 @@ class Command(object):
         
 class Plotter(object):
     def __init__(self, xyMin=(10,8), xyMax=(192,150), 
-            drawSpeed=35, moveSpeed=40, fastMoveSpeed=50, zSpeed=20, penDownZ = 23, penUpZ = 29):
+            drawSpeed=35, moveSpeed=40, fastMoveSpeed=50, zSpeed=20, penDownZ = 23, penUpZ = 29, safeUpZ = 40):
         self.xyMin = xyMin
         self.xyMax = xyMax
         self.drawSpeed = drawSpeed
@@ -123,36 +123,36 @@ def emitGcode(commands, scale = Scale(), plotter=Plotter(), scalingMode=SCALE_NO
 
     gcode.append('G0 S1 E0')
     gcode.append('G1 S1 E0')
-    gcode.append('G21 (millimeters)')
+    gcode.append('G21; millimeters)')
 
-    gcode.append('G28 (Home)')
-    gcode.append('G1 Z%.3f (pen up)' % plotter.penUpZ)
+    gcode.append('G28; home')
+    gcode.append('G1 Z%.3f; pen up' % plotter.safeUpZ)
 
     gcode.append('G1 F%.1f Y%.3f' % (plotter.fastMoveSpeed*60.,plotter.xyMin[1]))
     gcode.append('G1 F%.1f X%.3f' % (plotter.fastMoveSpeed*60.,plotter.xyMin[0]))
-    
+f    
     class State(object):
         pass
         
     state = State()
     state.curXY = plotter.xyMin
+    state.curZ = plotter.safeUpZ
     state.time = (plotter.xyMin[1]+plotter.xyMin[0]) / plotter.fastMoveSpeed
-    state.penDown = False
     
     def distance(a,b):
         return math.hypot(a[0]-b[0],a[1]-b[1])
     
     def penUp():
-        if state.penDown is not False:
-            gcode.append('G0 Z%.3f (pen up)' % plotter.penUpZ)
-            state.time += abs(plotter.penUpZ-plotter.penDownZ) / plotter.zSpeed
-            state.penDown = False
+        if state.curZ < plotter.penUpZ:
+            gcode.append('G0 Z%.3f; pen up' % plotter.penUpZ)
+            state.time += abs(plotter.penUpZ-plotter.curZ) / plotter.zSpeed
+            state.curZ = plotter.penUpZ
         
     def penDown():
-        if state.penDown is not True:
-            gcode.append('G0 Z%.3f (pen down)' % plotter.penDownZ)
-            state.time += abs(plotter.penUpZ-plotter.penDownZ) / plotter.zSpeed
-            state.penDown = True
+        if state.curZ != plotter.penDownZ:
+            gcode.append('G0 Z%.3f; pen down' % plotter.penDownZ)
+            state.time += abs(plotter.curZ-plotter.penDownZ) / plotter.zSpeed
+            state.curZ = plotter.penDownZ
 
     def penMove(down, speed, p):
         d = distance(state.curXY, p)
@@ -206,28 +206,31 @@ def parseHPGL(file,dpi=(1016.,1016.)):
                 commands.append(Command(Command.INIT))
             elif len(cmd) > 0:
                 sys.stderr.write('Unknown command '+cmd+'\n')
-    return commands
-
+    return commands    
+    
 def sendGcode(port, speed, plotter, commands, quiet = False):
     import serial
     import time
     
+    def checksum(s):
+        cs = 0
+        for c in s:
+            cs ^= ord(c)
+        return cs & 0xFF
+    
     s = serial.Serial(port, 115200)
-    s.write('\r\n\r\n')
-    time.sleep(2)
     s.flushInput()
     
-    for command in commands:
+    lineNumber = 1
+    s.write('M110 N1')
+
+## TODO: flow control    
+    for i in range(len(commands)):
+        lineNumber = 2+i
+        command = 'N' + str(lineNumber) + ' ' + re.sub(r'\;.*',r'', commands[i].strip())
+        command += '*' + str(checksum(command))
+        s.write(command+'\n')
         sys.stderr.write(command)
-        r = s.readline()
-        while r.startswith('wait'):
-            r = s.readline()
-        sys.stderr.write(' --> ' + r.strip() + '\n')
-        if not r.startswith('ok'):
-            sys.stderr.write('\nProblem sending data.\n')
-            s.write('G0 Z%.3f\n' % plotter.penUpZ)
-            s.close()
-            return
             
     s.close()
     
