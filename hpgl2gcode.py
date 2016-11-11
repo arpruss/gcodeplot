@@ -7,6 +7,11 @@ import math
 SCALE_NONE = 0
 SCALE_DOWN_ONLY = 1
 SCALE_BEST = 2
+ALIGN_BOTTOM = 0
+ALIGN_TOP = 1
+ALIGN_LEFT = ALIGN_BOTTOM
+ALIGN_RIGHT = ALIGN_TOP
+ALIGN_CENTER = 2
 
 class Command(object):
     INIT = 0
@@ -29,6 +34,7 @@ class Plotter(object):
         self.fastMoveSpeed = fastMoveSpeed
         self.penDownZ = penDownZ
         self.penUpZ = penUpZ
+        self.safeUpZ = safeUpZ
         self.zSpeed = zSpeed # currently only for measuring
         
     def inRange(self, point):
@@ -56,7 +62,19 @@ class Scale(object):
             else:
                 s[i] = (plotter.xyMax[i]-plotter.xyMin[i]) / delta
         self.scale = (min(s),min(s))
-        self.offset = tuple(plotter.xyMin[i] - s[i]*xyMin[i] for i in range(2))
+        self.offset = tuple(plotter.xyMin[i] - self.scale[i]*xyMin[i] for i in range(2))
+        
+    def align(self, plotter, xyMin, xyMax, align):
+        o = [0,0]
+        for i in range(2):
+            if align[i] == ALIGN_LEFT:
+                o[i] = plotter.xyMin[i] - self.scale[i]*xyMin[i]
+            elif align[i] == ALIGN_RIGHT:
+                o[i] = plotter.xyMax[i] - self.scale[i]*xyMax[i]
+            else:
+                o[i] = 0.5 * (plotter.xyMin[i] - self.scale[i]*xyMin[i] + plotter.xyMax[i] - self.scale[i]*xyMax[i])            
+        self.offset = tuple(o)
+                
         
     def scalePoint(self, point):
         return (point[0]*self.scale[0]+self.offset[0], point[1]*self.scale[1]+self.offset[1])
@@ -93,7 +111,7 @@ def dedup(commands):
 
     return newCommands
         
-def emitGcode(commands, scale = Scale(), plotter=Plotter(), scalingMode=SCALE_NONE, tolerance = 0):
+def emitGcode(commands, scale = Scale(), plotter=Plotter(), scalingMode=SCALE_NONE, align = None, tolerance = 0):
 
     xyMin = [float("inf"),float("inf")]
     xyMax = [float("-inf"),float("-inf")]
@@ -119,6 +137,9 @@ def emitGcode(commands, scale = Scale(), plotter=Plotter(), scalingMode=SCALE_NO
         scale = Scale()
         scale.fit(plotter, xyMin, xyMax)
         
+    if align is not None:
+        scale.align(plotter, xyMin, xyMax, align)
+        
     gcode = []
 
     gcode.append('G0 S1 E0')
@@ -130,7 +151,7 @@ def emitGcode(commands, scale = Scale(), plotter=Plotter(), scalingMode=SCALE_NO
 
     gcode.append('G1 F%.1f Y%.3f' % (plotter.fastMoveSpeed*60.,plotter.xyMin[1]))
     gcode.append('G1 F%.1f X%.3f' % (plotter.fastMoveSpeed*60.,plotter.xyMin[0]))
-f    
+    
     class State(object):
         pass
         
@@ -145,13 +166,13 @@ f
     def penUp():
         if state.curZ < plotter.penUpZ:
             gcode.append('G0 Z%.3f; pen up' % plotter.penUpZ)
-            state.time += abs(plotter.penUpZ-plotter.curZ) / plotter.zSpeed
+            state.time += abs(plotter.penUpZ-state.curZ) / plotter.zSpeed
             state.curZ = plotter.penUpZ
         
     def penDown():
         if state.curZ != plotter.penDownZ:
             gcode.append('G0 Z%.3f; pen down' % plotter.penDownZ)
-            state.time += abs(plotter.curZ-plotter.penDownZ) / plotter.zSpeed
+            state.time += abs(state.curZ-plotter.penDownZ) / plotter.zSpeed
             state.curZ = plotter.penDownZ
 
     def penMove(down, speed, p):
@@ -236,8 +257,9 @@ def sendGcode(port, speed, plotter, commands, quiet = False):
     
 if __name__ == '__main__':
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "rfdma:D:t:s:S:", ["--allow-repeats", "--scale-to-fit",
-                        "--scale-down", "--scale-manual", "--area=", '--input-dpi=', '--tolerance=', '--send=', '--send-speed='], )
+        opts, args = getopt.getopt(sys.argv[1:], "rfdma:D:t:s:S:x:y:", ["--allow-repeats", "--scale-to-fit",
+                        "--scale-down", "--scale-manual", "--area=", '--align-left=', '--align-right=', 
+                        '--input-dpi=', '--tolerance=', '--send=', '--send-speed='], )
         if len(args) != 1:
             raise getopt.GetoptError("invalid commandline")
 
@@ -247,6 +269,7 @@ if __name__ == '__main__':
         sendPort = None
         sendSpeed = 115200
         scalingMode = SCALE_BEST
+        align = [ALIGN_LEFT, ALIGN_BOTTOM]
         plotter = Plotter()
         dpi = (1016., 1016.)
             
@@ -259,6 +282,20 @@ if __name__ == '__main__':
                 scalingMode = SCALE_DOWN_ONLY
             elif opt in ('-m','--scale-manual'):
                 scalingMode = SCALE_NONE
+            elif opt in ('-x','--align-x'):
+                if arg.startswith('l'):
+                    align[0] = ALIGN_LEFT
+                elif arg.startswith('r'):
+                    align[0] = ALIGN_RIGHT
+                elif arg.startswith('c'):
+                    align[0] =ALIGN_CENTER
+            elif opt in ('-y','--align-y'):
+                if arg.startswith('b'):
+                    align[1] = ALIGN_LEFT
+                elif arg.startswith('t'):
+                    align[1] = ALIGN_RIGHT
+                elif arg.startswith('c'):
+                    align[1] = ALIGN_CENTER
             elif opt in ('-t', '--tolerance'):
                 tolerance = float(arg)
             elif opt in ('-s', '--send'):
@@ -295,7 +332,7 @@ if __name__ == '__main__':
     commands = parseHPGL(args[0], dpi=dpi)
     if doDedup:
         commands = dedup(commands)
-    g = emitGcode(dedup(commands), scale=scale, scalingMode=scalingMode, tolerance=tolerance, plotter=plotter)
+    g = emitGcode(dedup(commands), scale=scale, align=align, scalingMode=scalingMode, tolerance=tolerance, plotter=plotter)
     if len(g)>0:
         if sendPort is not None:
             sendGcode(sendPort, 115200, plotter, g)
