@@ -26,7 +26,7 @@ class Command(object):
         
 class Plotter(object):
     def __init__(self, xyMin=(10,8), xyMax=(192,150), 
-            drawSpeed=35, moveSpeed=40, fastMoveSpeed=50, zSpeed=20, penDownZ = 23, penUpZ = 29, safeUpZ = 40):
+            drawSpeed=35, moveSpeed=40, fastMoveSpeed=50, zSpeed=20, penDownZ = 13.5, penUpZ = 18, safeUpZ = 40):
         self.xyMin = xyMin
         self.xyMax = xyMax
         self.drawSpeed = drawSpeed
@@ -232,6 +232,23 @@ def parseHPGL(file,dpi=(1016.,1016.)):
 def sendGcode(port, speed, plotter, commands, quiet = False):
     import serial
     import time
+    import threading
+    import os
+    
+    class State(object):
+        pass
+        
+    state = State()
+    state.cmd = None
+    state.done = False
+    
+    print('Type s<ENTER> to stop and p<ENTER> to pause.')
+    
+    def pauseThread():
+        while not state.done:
+            state.cmd = raw_input().strip()
+            
+    threading.Thread(target = pauseThread).start()
     
     def checksum(s):
         cs = 0
@@ -243,7 +260,7 @@ def sendGcode(port, speed, plotter, commands, quiet = False):
     s.flushInput()
     
     lineNumber = 1
-    s.write('M110 N1')
+    s.write('\nM110 N1\n')
 
 ## TODO: flow control    
     for i in range(len(commands)):
@@ -251,7 +268,23 @@ def sendGcode(port, speed, plotter, commands, quiet = False):
         command = 'N' + str(lineNumber) + ' ' + re.sub(r'\;.*',r'', commands[i].strip())
         command += '*' + str(checksum(command))
         s.write(command+'\n')
-        sys.stderr.write(command)
+#        sys.stderr.write(command+'\n')
+#        n = s.inWaiting()
+        s.flushInput()
+#        sys.stderr.write(s.read(n))
+        time.sleep(0.1)
+        if state.cmd is not None:
+            if state.cmd == '':
+                print('Terminating.')
+                state.done = True
+                os._exit(0)
+            elif state.cmd == 'p':
+                print('Press enter to resume.')
+                state.cmd = None
+                while state.cmd is None:
+                    time.sleep(0.1)
+                print('Resuming.')
+            state.cmd = None
             
     s.close()
     
