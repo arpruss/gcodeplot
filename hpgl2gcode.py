@@ -229,65 +229,6 @@ def parseHPGL(file,dpi=(1016.,1016.)):
                 sys.stderr.write('Unknown command '+cmd+'\n')
     return commands    
     
-def sendGcode(port, speed, plotter, commands, quiet = False):
-    import serial
-    import time
-    import threading
-    import os
-    
-    class State(object):
-        pass
-        
-    state = State()
-    state.cmd = None
-    state.done = False
-    
-    print('Type s<ENTER> to stop and p<ENTER> to pause.')
-    
-    def pauseThread():
-        while not state.done:
-            state.cmd = raw_input().strip()
-            
-    threading.Thread(target = pauseThread).start()
-    
-    def checksum(s):
-        cs = 0
-        for c in s:
-            cs ^= ord(c)
-        return cs & 0xFF
-    
-    s = serial.Serial(port, 115200)
-    s.flushInput()
-    
-    lineNumber = 1
-    s.write('\nM110 N1\n')
-
-## TODO: flow control    
-    for i in range(len(commands)):
-        lineNumber = 2+i
-        command = 'N' + str(lineNumber) + ' ' + re.sub(r'\;.*',r'', commands[i].strip())
-        command += '*' + str(checksum(command))
-        s.write(command+'\n')
-#        sys.stderr.write(command+'\n')
-#        n = s.inWaiting()
-        s.flushInput()
-#        sys.stderr.write(s.read(n))
-        time.sleep(0.1)
-        if state.cmd is not None:
-            if state.cmd == '':
-                print('Terminating.')
-                state.done = True
-                os._exit(0)
-            elif state.cmd == 'p':
-                print('Press enter to resume.')
-                state.cmd = None
-                while state.cmd is None:
-                    time.sleep(0.1)
-                print('Resuming.')
-            state.cmd = None
-            
-    s.close()
-    
 if __name__ == '__main__':
     try:
         opts, args = getopt.getopt(sys.argv[1:], "rfdma:D:t:s:S:x:y:", ["--allow-repeats", "--scale-to-fit",
@@ -368,7 +309,8 @@ if __name__ == '__main__':
     g = emitGcode(dedup(commands), scale=scale, align=align, scalingMode=scalingMode, tolerance=tolerance, plotter=plotter)
     if len(g)>0:
         if sendPort is not None:
-            sendGcode(sendPort, 115200, plotter, g)
+            import sendGcode from sendGcode
+            sendGcode(port=sendPort, speed=115200, commands=g)
         else:    
             print('\n'.join(g))
     else:
