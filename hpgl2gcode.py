@@ -26,16 +26,15 @@ class Command(object):
         
 class Plotter(object):
     def __init__(self, xyMin=(10,8), xyMax=(192,150), 
-            drawSpeed=35, moveSpeed=40, fastMoveSpeed=50, zSpeed=20, penDownZ = 13.5, penUpZ = 18, safeUpZ = 40):
+            drawSpeed=35, moveSpeed=40, zSpeed=5, penDownZ = 13.5, penUpZ = 18, safeUpZ = 40):
         self.xyMin = xyMin
         self.xyMax = xyMax
         self.drawSpeed = drawSpeed
         self.moveSpeed = moveSpeed
-        self.fastMoveSpeed = fastMoveSpeed
         self.penDownZ = penDownZ
         self.penUpZ = penUpZ
         self.safeUpZ = safeUpZ
-        self.zSpeed = zSpeed # currently only for measuring
+        self.zSpeed = zSpeed
         
     def inRange(self, point):
         for i in range(2):
@@ -149,8 +148,8 @@ def emitGcode(commands, scale = Scale(), plotter=Plotter(), scalingMode=SCALE_NO
     gcode.append('G28; home')
     gcode.append('G1 Z%.3f; pen up' % plotter.safeUpZ)
 
-    gcode.append('G1 F%.1f Y%.3f' % (plotter.fastMoveSpeed*60.,plotter.xyMin[1]))
-    gcode.append('G1 F%.1f X%.3f' % (plotter.fastMoveSpeed*60.,plotter.xyMin[0]))
+    gcode.append('G1 F%.1f Y%.3f' % (plotter.moveSpeed*60.,plotter.xyMin[1]))
+    gcode.append('G1 F%.1f X%.3f' % (plotter.moveSpeed*60.,plotter.xyMin[0]))
     
     class State(object):
         pass
@@ -158,20 +157,20 @@ def emitGcode(commands, scale = Scale(), plotter=Plotter(), scalingMode=SCALE_NO
     state = State()
     state.curXY = plotter.xyMin
     state.curZ = plotter.safeUpZ
-    state.time = (plotter.xyMin[1]+plotter.xyMin[0]) / plotter.fastMoveSpeed
+    state.time = (plotter.xyMin[1]+plotter.xyMin[0]) / plotter.moveSpeed
     
     def distance(a,b):
         return math.hypot(a[0]-b[0],a[1]-b[1])
     
     def penUp():
         if state.curZ < plotter.penUpZ:
-            gcode.append('G0 Z%.3f; pen up' % plotter.penUpZ)
+            gcode.append('G0 F%.1f Z%.3f; pen up' % (plotter.zSpeed*60., plotter.penUpZ))
             state.time += abs(plotter.penUpZ-state.curZ) / plotter.zSpeed
             state.curZ = plotter.penUpZ
         
     def penDown():
         if state.curZ != plotter.penDownZ:
-            gcode.append('G0 Z%.3f; pen down' % plotter.penDownZ)
+            gcode.append('G0 F%.1f Z%.3f; pen down' % (plotter.zSpeed*60., plotter.penDownZ))
             state.time += abs(state.curZ-plotter.penDownZ) / plotter.zSpeed
             state.curZ = plotter.penDownZ
 
@@ -228,12 +227,13 @@ def parseHPGL(file,dpi=(1016.,1016.)):
             elif len(cmd) > 0:
                 sys.stderr.write('Unknown command '+cmd+'\n')
     return commands    
-    
+        
 if __name__ == '__main__':
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "rfdma:D:t:s:S:x:y:", ["--allow-repeats", "--scale-to-fit",
-                        "--scale-down", "--scale-manual", "--area=", '--align-left=', '--align-right=', 
-                        '--input-dpi=', '--tolerance=', '--send=', '--send-speed='], )
+        opts, args = getopt.getopt(sys.argv[1:], "rfdma:D:t:s:S:x:y:z:Z:p:f:F:u:", ["--allow-repeats", "--scale-to-fit",
+                        "--scale-down", "--scale-manual", "--area=", '--align-x=', '--align-y=', 
+                        '--input-dpi=', '--tolerance=', '--send=', '--send-speed=', '--pen-down-z=', '--pen-up-z=', '--parking-z=',
+                        '--pen-down-speed=', '--pen-up-speed=', '--z-speed=' ], )
         if len(args) != 1:
             raise getopt.GetoptError("invalid commandline")
 
@@ -286,6 +286,16 @@ if __name__ == '__main__':
                     dpi = v[0:2]
                 else:
                     dpi = (v[0],v[0])
+            elif opt in ('-Z', '--pen-up-z'):
+                plotter.penUpZ = float(arg)
+            elif opt in ('-z', '--pen-down-z'):
+                plotter.penDownZ = float(arg)
+            elif opt in ('-p', '--parking-z'):
+                plotter.safeUpZ = float(arg)
+            elif opt in ('-F', '--pen-up-speed'):
+                plotter.moveSpeed = float(arg)
+            elif opt in ('-f', '--pen-down-speed'):
+                plotter.drawSpeed = float(arg)
         
     except getopt.GetoptError:
         print("hpgl2gcode.py [options] inputfile [> output.gcode]")
@@ -295,11 +305,21 @@ if __name__ == '__main__':
  -f|--scale-to-fit: scale to fit plotter area [default]
  -d|--scale-down: scale to fit plotter area only if too big
  -m|--scale-manual: no scaling
- -a|--area=x1,y1,x2,y2: print area in millimeters [default: 0,0,200,200]
+ -a|--area=x1,y1,x2,y2: print area in millimeters
  -D|--input-dpi=xdpi[,ydpi]: hpgl dpi
  -t|--tolerance=x: skip moves of x millimeters or less
- -s|--send=port: send gcode to port instead of stdout
+ -s|--send=port: send gcode to serial port instead of stdout
  -S|--send-speed=baud: set baud rate for sending
+ -x|--align-x: set alignment to left(l), right(r) or center(c)
+ -y|--align-y: set alignment to bottom(b), top(t) or center(c)
+ -Z|--pen-up-z=z: set z-position for pen-up (millimeters)
+ -z|--pen-down-z=z: set z-position for pen-down (millimeters)
+ -p|--parking-z=z: set z-position for parking (millimeters)
+ -Z|--pen-up-z=z: set z-position for pen-up (millimeters)
+ -z|--pen-down-z=z: set z-position for pen-down (millimeters)
+ -Z|--pen-up-speed=z: speed for moving with pen up (millimeters/second)
+ -z|--pen-down-speed=z: speed for moving with pen down (millimeters/second)
+ -u|--z-speed: speed for up/down movement (millimeters/second)
 """)
         sys.exit(2)
         
@@ -309,8 +329,8 @@ if __name__ == '__main__':
     g = emitGcode(dedup(commands), scale=scale, align=align, scalingMode=scalingMode, tolerance=tolerance, plotter=plotter)
     if len(g)>0:
         if sendPort is not None:
-            import sendGcode from sendGcode
-            sendGcode(port=sendPort, speed=115200, commands=g)
+            import sendgcode
+            sendgcode.sendGcode(port=sendPort, speed=115200, commands=g)
         else:    
             print('\n'.join(g))
     else:
