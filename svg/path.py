@@ -2,7 +2,6 @@ from __future__ import division
 from math import sqrt, cos, sin, acos, degrees, radians, log
 from collections import MutableSequence
 
-
 # This file contains classes for the different types of SVG path segments as
 # well as a Path object that contains a sequence of path segments.
 
@@ -515,3 +514,4 @@ class Path(MutableSequence):
             parts.append('Z')
 
         return ' '.join(parts)
+        

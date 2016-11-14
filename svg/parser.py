@@ -2,6 +2,8 @@
 
 import re
 from . import path
+import xml.etree.ElementTree as ET
+import re
 
 COMMANDS = set('MmZzLlHhVvCcSsQqTtAa')
 UPPERCASE = set('MZLHVCSQTA')
@@ -187,3 +189,39 @@ def parse_path(pathdef, current_pos=0j):
             current_pos = end
 
     return segments
+
+def sizeFromString(text):
+    """
+    Returns size in mm, if possible.
+    """
+    text = re.sub(r'\s',r'', text)
+    try:
+        return float(text) # NOT mm
+    except:
+        if text[-1] == '%':
+            return float(text[:-1]) # NOT mm
+        units = text[-2:].lower()
+        x = float(text[:-2])
+        convert = { 'mm':1, 'cm':10, 'in':25.4, 'px':25.4/96, 'pt':25.4/72, 'pc':12*25.4/72 }
+        try:
+            return x * convert[units]
+        except:
+            return x # NOT mm
+
+def getPaths(paths, tree):
+    if tree.tag.endswith('}path'):
+        paths.append(parse_path(tree.attrib['d']))
+    else:
+        for child in tree:
+            getPaths(paths, child)
+            
+def getPathsFromSVG(filename):
+    tree = ET.parse(filename)
+    svg = tree.getroot()
+    width = sizeFromString(svg.attrib['width'])
+    height = sizeFromString(svg.attrib['height'])
+    viewBox = map(float, re.split(r'[\s,]+', svg.attrib['viewBox']))
+    paths = []
+    getPaths(paths, svg)
+    return paths
+    
