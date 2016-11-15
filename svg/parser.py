@@ -20,7 +20,7 @@ def _tokenize_path(pathdef):
             yield token
 
 
-def parse_path(pathdef, current_pos=0j):
+def parse_path(pathdef, current_pos=0j, scaler=lambda z : z):
     # In the SVG specs, initial movetos are absolute, even if
     # specified as 'm'. This is the default behavior here as well.
     # But if you pass in a current_pos variable, the initial moveto
@@ -72,7 +72,7 @@ def parse_path(pathdef, current_pos=0j):
         elif command == 'Z':
             # Close path
             if current_pos != start_pos:
-                segments.append(path.Line(current_pos, start_pos))
+                segments.append(path.Line(scaler(current_pos), scaler(start_pos)))
             segments.closed = True
             current_pos = start_pos
             start_pos = None
@@ -84,7 +84,7 @@ def parse_path(pathdef, current_pos=0j):
             pos = float(x) + float(y) * 1j
             if not absolute:
                 pos += current_pos
-            segments.append(path.Line(current_pos, pos))
+            segments.append(path.Line(scaler(current_pos), scaler(pos)))
             current_pos = pos
 
         elif command == 'H':
@@ -92,7 +92,7 @@ def parse_path(pathdef, current_pos=0j):
             pos = float(x) + current_pos.imag * 1j
             if not absolute:
                 pos += current_pos.real
-            segments.append(path.Line(current_pos, pos))
+            segments.append(path.Line(scaler(current_pos), scaler(pos)))
             current_pos = pos
 
         elif command == 'V':
@@ -100,7 +100,7 @@ def parse_path(pathdef, current_pos=0j):
             pos = current_pos.real + float(y) * 1j
             if not absolute:
                 pos += current_pos.imag * 1j
-            segments.append(path.Line(current_pos, pos))
+            segments.append(path.Line(scaler(current_pos), scaler(pos)))
             current_pos = pos
 
         elif command == 'C':
@@ -113,7 +113,7 @@ def parse_path(pathdef, current_pos=0j):
                 control2 += current_pos
                 end += current_pos
 
-            segments.append(path.CubicBezier(current_pos, control1, control2, end))
+            segments.append(path.CubicBezier(scaler(current_pos), scaler(control1), scaler(control2), scaler(end)))
             current_pos = end
 
         elif command == 'S':
@@ -138,7 +138,7 @@ def parse_path(pathdef, current_pos=0j):
                 control2 += current_pos
                 end += current_pos
 
-            segments.append(path.CubicBezier(current_pos, control1, control2, end))
+            segments.append(path.CubicBezier(scaler(current_pos), scaler(control1), scaler(control2), scaler(end)))
             current_pos = end
 
         elif command == 'Q':
@@ -149,7 +149,7 @@ def parse_path(pathdef, current_pos=0j):
                 control += current_pos
                 end += current_pos
 
-            segments.append(path.QuadraticBezier(current_pos, control, end))
+            segments.append(path.QuadraticBezier(scaler(current_pos), scaler(control), scaler(end)))
             current_pos = end
 
         elif command == 'T':
@@ -172,7 +172,7 @@ def parse_path(pathdef, current_pos=0j):
             if not absolute:
                 end += current_pos
 
-            segments.append(path.QuadraticBezier(current_pos, control, end))
+            segments.append(path.QuadraticBezier(scaler(current_pos), scaler(control), scaler(end)))
             current_pos = end
 
         elif command == 'A':
@@ -185,7 +185,7 @@ def parse_path(pathdef, current_pos=0j):
             if not absolute:
                 end += current_pos
 
-            segments.append(path.Arc(current_pos, radius, rotation, arc, sweep, end))
+            segments.append(path.Arc(scaler(current_pos), scaler(radius)-scaler(0j), rotation, arc, sweep, scaler(end)))
             current_pos = end
 
     return segments
@@ -208,20 +208,27 @@ def sizeFromString(text):
         except:
             return x # NOT mm
 
-def getPaths(paths, tree):
-    if tree.tag.endswith('}path'):
-        paths.append(parse_path(tree.attrib['d']))
-    else:
-        for child in tree:
-            getPaths(paths, child)
-            
 def getPathsFromSVG(filename):
+    def getPaths(paths, scaler, tree):
+        tag = re.sub(r'.*}', '', tree.tag)
+        if tag == 'path':
+            paths.append(parse_path(tree.attrib['d'], scaler=scaler))
+        else:
+            for child in tree:
+                getPaths(paths, scaler, child)
+
+    def scale(width, height, viewBox, z):
+        x = (z.real - viewBox[0]) / (viewBox[2] - viewBox[0]) * width
+        y = (z.imag - viewBox[1]) / (viewBox[3] - viewBox[1]) * height
+        return complex(x,y)
+                
     tree = ET.parse(filename)
     svg = tree.getroot()
     width = sizeFromString(svg.attrib['width'])
     height = sizeFromString(svg.attrib['height'])
     viewBox = map(float, re.split(r'[\s,]+', svg.attrib['viewBox']))
+    scaler = lambda z : scale(width, height, viewBox, z)
     paths = []
-    getPaths(paths, svg)
+    getPaths(paths, scaler, svg)
     return paths
     
