@@ -7,7 +7,7 @@ try:
     if len(args) != 1:
         raise getopt.GetoptError("invalid commandline")
 
-    precision = 0.1
+    precision = 0.025
     dpi = 1016
         
     for opt,arg in opts:
@@ -18,7 +18,7 @@ except getopt.GetoptError:
     print("svg2gcode.py [options] inputfile [> output.gcode]")
     print("""
  -h|--help: this
- -p|--precision: precision in millimeters (default 0.1)
+ -p|--precision: precision in millimeters (default 0.025)
  -d|--dpi: output DPI (default: 1016)
 """)
 
