@@ -124,12 +124,12 @@ def parse_path(pathdef, current_pos=0j, scaler=lambda z : z):
                 # If there is no previous command or if the previous command
                 # was not an C, c, S or s, assume the first control point is
                 # coincident with the current point.
-                control1 = current_pos
+                control1 = scaler(current_pos)
             else:
                 # The first control point is assumed to be the reflection of
                 # the second control point on the previous command relative
                 # to the current point.
-                control1 = current_pos + current_pos - segments[-1].control2
+                control1 = 2 * scaler(current_pos) - segments[-1].control2
 
             control2 = float(elements.pop()) + float(elements.pop()) * 1j
             end = float(elements.pop()) + float(elements.pop()) * 1j
@@ -138,7 +138,7 @@ def parse_path(pathdef, current_pos=0j, scaler=lambda z : z):
                 control2 += current_pos
                 end += current_pos
 
-            segments.append(path.CubicBezier(scaler(current_pos), scaler(control1), scaler(control2), scaler(end)))
+            segments.append(path.CubicBezier(scaler(current_pos), control1, scaler(control2), scaler(end)))
             current_pos = end
 
         elif command == 'Q':
@@ -160,19 +160,19 @@ def parse_path(pathdef, current_pos=0j, scaler=lambda z : z):
                 # If there is no previous command or if the previous command
                 # was not an Q, q, T or t, assume the first control point is
                 # coincident with the current point.
-                control = current_pos
+                control = scaler(current_pos)
             else:
                 # The control point is assumed to be the reflection of
                 # the control point on the previous command relative
                 # to the current point.
-                control = current_pos + current_pos - segments[-1].control
+                control = 2 * scaler(current_pos) - segments[-1].control
 
             end = float(elements.pop()) + float(elements.pop()) * 1j
 
             if not absolute:
                 end += current_pos
 
-            segments.append(path.QuadraticBezier(scaler(current_pos), scaler(control), scaler(end)))
+            segments.append(path.QuadraticBezier(scaler(current_pos), control, scaler(end)))
             current_pos = end
 
         elif command == 'A':
@@ -208,7 +208,7 @@ def sizeFromString(text):
         except:
             return x # NOT mm
 
-def getPathsFromSVG(filename):
+def getPathsFromSVG(filename,yGrowsUp=True):
     def getPaths(paths, scaler, tree):
         tag = re.sub(r'.*}', '', tree.tag)
         if tag == 'path':
@@ -219,7 +219,10 @@ def getPathsFromSVG(filename):
 
     def scale(width, height, viewBox, z):
         x = (z.real - viewBox[0]) / (viewBox[2] - viewBox[0]) * width
-        y = (z.imag - viewBox[1]) / (viewBox[3] - viewBox[1]) * height
+        if yGrowsUp:
+            y = (viewBox[3]-z.imag) / (viewBox[3] - viewBox[1]) * height
+        else:
+            y = (z.imag - viewBox[1]) / (viewBox[3] - viewBox[1]) * height
         return complex(x,y)
                 
     tree = ET.parse(filename)
@@ -230,5 +233,6 @@ def getPathsFromSVG(filename):
     scaler = lambda z : scale(width, height, viewBox, z)
     paths = []
     getPaths(paths, scaler, svg)
-    return paths
-    
+    return ( paths, scale(width, height, viewBox, complex(viewBox[0], viewBox[1])), 
+        complex(viewBox[0], viewBox[1]) ) 
+        

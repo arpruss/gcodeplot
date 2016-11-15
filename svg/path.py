@@ -30,7 +30,7 @@ def segment_length(curve, start, end, start_point, end_point, error, min_depth, 
 def approximate(path, start, end, start_point, end_point, max_error, depth, max_depth):
     if depth >= max_depth:
         return [start_point, end_point]
-    actual_length = path.measure(start, end)
+    actual_length = path.measure(start, end, error=max_error/4)
     linear_length = abs(end_point - start_point)
     # Worst case deviation given a fixed linear_length and actual_length would probably be 
     # a symmetric tent shape (I haven't proved it -- TODO).
@@ -440,7 +440,7 @@ class Path(MutableSequence):
             
         return paths
         
-    def getApproximatePoints(self, error=0.001, max_depth=16):
+    def getApproximatePoints(self, error=0.001, max_depth=32):
         return approximate(self, 0., 1., self.point(0.), self.point(1.), error, 0, max_depth)
 
     @property
