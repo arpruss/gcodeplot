@@ -1,3 +1,5 @@
+# TODO: Handle more than just paths.
+
 import svg.parser as parser
 import getopt
 import sys

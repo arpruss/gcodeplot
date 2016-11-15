@@ -209,6 +209,8 @@ def sizeFromString(text):
             return x # NOT mm
 
 def getPathsFromSVG(filename,yGrowsUp=True):
+    paths = []
+
     def getPaths(paths, scaler, tree):
         tag = re.sub(r'.*}', '', tree.tag)
         if tag == 'path':
@@ -231,8 +233,6 @@ def getPathsFromSVG(filename,yGrowsUp=True):
     height = sizeFromString(svg.attrib['height'])
     viewBox = map(float, re.split(r'[\s,]+', svg.attrib['viewBox']))
     scaler = lambda z : scale(width, height, viewBox, z)
-    paths = []
     getPaths(paths, scaler, svg)
-    return ( paths, scale(width, height, viewBox, complex(viewBox[0], viewBox[1])), 
-        complex(viewBox[0], viewBox[1]) ) 
+    return paths, scaler(complex(viewBox[0], viewBox[1])), scaler(complex(viewBox[0], viewBox[1])) 
         
