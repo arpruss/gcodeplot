@@ -3,6 +3,7 @@ import re
 import sys
 import getopt
 import math
+import xml.etree.ElementTree as ET
 
 SCALE_NONE = 0
 SCALE_DOWN_ONLY = 1
@@ -197,35 +198,34 @@ def emitGcode(commands, scale = Scale(), plotter=Plotter(), scalingMode=SCALE_NO
 
     return gcode
     
-def parseHPGL(file,dpi=(1016.,1016.)):
+def parseHPGL(data,dpi=(1016.,1016.)):
     try:
         scale = (254./dpi[0], 254./dpi[1])
     except:
         scale = (254./dpi, 254./dpi)
 
     commands = []
-    with open(file, 'r') as f:
-        for cmd in re.sub(r'\s',r'',f.read()).split(';'):
-            if cmd.startswith('PD'):
-                try:
-                    coords = map(float, cmd[2:].split(','))
-                    for i in range(0,len(coords),2):
-                        commands.append(Command(Command.MOVE_PEN_DOWN, point=(coords[i]*scale[0], coords[i+1]*scale[1])))
-                except:
-                    pass 
-                    # ignore no-movement PD/PU
-            elif cmd.startswith('PU'):
-                try:
-                    coords = map(float, cmd[2:].split(','))
-                    for i in range(0,len(coords),2):
-                        commands.append(Command(Command.MOVE_PEN_UP, point=(coords[i]*scale[0], coords[i+1]*scale[1])))
-                except:
-                    pass 
-                    # ignore no-movement PD/PU
-            elif cmd.startswith('IN'):
-                commands.append(Command(Command.INIT))
-            elif len(cmd) > 0:
-                sys.stderr.write('Unknown command '+cmd+'\n')
+    for cmd in re.sub(r'\s',r'',data).split(';'):
+        if cmd.startswith('PD'):
+            try:
+                coords = map(float, cmd[2:].split(','))
+                for i in range(0,len(coords),2):
+                    commands.append(Command(Command.MOVE_PEN_DOWN, point=(coords[i]*scale[0], coords[i+1]*scale[1])))
+            except:
+                pass 
+                # ignore no-movement PD/PU
+        elif cmd.startswith('PU'):
+            try:
+                coords = map(float, cmd[2:].split(','))
+                for i in range(0,len(coords),2):
+                    commands.append(Command(Command.MOVE_PEN_UP, point=(coords[i]*scale[0], coords[i+1]*scale[1])))
+            except:
+                pass 
+                # ignore no-movement PD/PU
+        elif cmd.startswith('IN'):
+            commands.append(Command(Command.INIT))
+        elif len(cmd) > 0:
+            sys.stderr.write('Unknown command '+cmd+'\n')
     return commands    
         
 if __name__ == '__main__':
@@ -298,8 +298,8 @@ if __name__ == '__main__':
                 plotter.drawSpeed = float(arg)
         
     except getopt.GetoptError:
-        print("hpgl2gcode.py [options] inputfile [> output.gcode]")
-        print("""
+        sys.stderr.write("hpgl2gcode.py [options] inputfile [> output.gcode]\n")
+        sys.stderr.write("""
  -h|--help: this
  -r|--allow-repeats: do not deduplicate paths [default: off]
  -f|--scale-to-fit: scale to fit plotter area [default]
@@ -322,8 +322,23 @@ if __name__ == '__main__':
  -u|--z-speed: speed for up/down movement (millimeters/second)
 """)
         sys.exit(2)
+
+    with open(args[0]) as f:
+        data = f.read()
         
-    commands = parseHPGL(args[0], dpi=dpi)
+    try:
+        ET.fromstring(data)
+        svg = 'svg' in ET.parse(filename).tag
+    except:
+        svg = False
+        
+    if not svg and 'PD' not in data and 'PU' not in data:
+        sys.stderr.write("Unrecognized file.\n")
+        exit(1)
+        
+    assert not svg # not yet supported
+        
+    commands = parseHPGL(data, dpi=dpi)
     if doDedup:
         commands = dedup(commands)
     g = emitGcode(dedup(commands), scale=scale, align=align, scalingMode=scalingMode, tolerance=tolerance, plotter=plotter)
