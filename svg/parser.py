@@ -208,7 +208,7 @@ def sizeFromString(text):
         except:
             return x # NOT mm
 
-def getPathsFromSVG(filename,yGrowsUp=True):
+def getPathsFromSVG(svg,yGrowsUp=True):
     paths = []
 
     def getPaths(paths, scaler, tree):
@@ -226,13 +226,14 @@ def getPathsFromSVG(filename,yGrowsUp=True):
         else:
             y = (z.imag - viewBox[1]) / (viewBox[3] - viewBox[1]) * height
         return complex(x,y)
-                
-    tree = ET.parse(filename)
-    svg = tree.getroot()
+    
     width = sizeFromString(svg.attrib['width'])
     height = sizeFromString(svg.attrib['height'])
     viewBox = map(float, re.split(r'[\s,]+', svg.attrib['viewBox']))
     scaler = lambda z : scale(width, height, viewBox, z)
     getPaths(paths, scaler, svg)
     return paths, scaler(complex(viewBox[0], viewBox[1])), scaler(complex(viewBox[0], viewBox[1])) 
-        
+
+def getPathsFromSVGFile(filename,yGrowsUp=True):
+    return getPathsFromSVG(ET.parse(filename).getroot(),yGrowsUp=yGrowsUp)
+    

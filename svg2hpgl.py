@@ -5,7 +5,7 @@ import getopt
 import sys
 
 try:
-    opts, args = getopt.getopt(sys.argv[1:], "p:d:", ["--precision=", "--dpi=" ], )
+    opts, args = getopt.getopt(sys.argv[1:], "t:d:", ["--tolerance=", "--dpi=" ], )
     if len(args) != 1:
         raise getopt.GetoptError("invalid commandline")
 
@@ -15,16 +15,18 @@ try:
     for opt,arg in opts:
         if opt in ('-p','--precision'):
             precision = float(arg)
+        elif opt in ('-d','--dpi'):
+            dpi = float(arg)
     
 except getopt.GetoptError:
     print("svg2gcode.py [options] inputfile [> output.gcode]")
     print("""
  -h|--help: this
- -p|--precision: precision in millimeters (default 0.025)
+ -t|--tolerance: precision in millimeters (default 0.025)
  -d|--dpi: output DPI (default: 1016)
 """)
 
-paths, corner1, corner2 = parser.getPathsFromSVG(args[0])
+paths, corner1, corner2 = parser.getPathsFromSVGFile(args[0])
 
 def hpglCoordinates(z):
     x = z.real * dpi / 25.4

@@ -4,6 +4,7 @@ import sys
 import getopt
 import math
 import xml.etree.ElementTree as ET
+from svg.parser import getPathsFromSVG 
 
 SCALE_NONE = 0
 SCALE_DOWN_ONLY = 1
@@ -110,6 +111,27 @@ def dedup(commands):
             curPoint = c.point
 
     return newCommands
+    
+def removePenBob(commands):
+    """
+    Remove commands that move the pen up and then back down.
+    """
+    newCommands = []
+    penDown = False
+    i = 0
+    while i < len(commands):
+        if ( penDown and commands[i].command == Command.MOVE_PEN_UP and 
+                i+1 < len(commands) and commands[i+1].command == Command.MOVE_PEN_DOWN and
+                commands[i].point == commands[i+1].point ):
+            i += 1 
+        elif commands[i].command == Command.MOVE_PEN_UP:
+            penDown = False
+            newCommands.append(commands[i])
+        elif commands[i].command == Command.MOVE_PEN_DOWN:
+            penUp = True
+            newCommands.append(commands[i])
+        i += 1
+    return newCommands
         
 def emitGcode(commands, scale = Scale(), plotter=Plotter(), scalingMode=SCALE_NONE, align = None, tolerance = 0):
 
@@ -144,7 +166,7 @@ def emitGcode(commands, scale = Scale(), plotter=Plotter(), scalingMode=SCALE_NO
 
     gcode.append('G0 S1 E0')
     gcode.append('G1 S1 E0')
-    gcode.append('G21; millimeters)')
+    gcode.append('G21; millimeters')
 
     gcode.append('G28; home')
     gcode.append('G1 Z%.3f; pen up' % plotter.safeUpZ)
@@ -225,9 +247,19 @@ def parseHPGL(data,dpi=(1016.,1016.)):
         elif cmd.startswith('IN'):
             commands.append(Command(Command.INIT))
         elif len(cmd) > 0:
-            sys.stderr.write('Unknown command '+cmd+'\n')
+            sys.stderr.write('Unknown command '+cmd[:2]+'\n')
     return commands    
-        
+
+def parseSVG(svgTree, tolerance=0.05):
+    commands = []
+    for path in getPathsFromSVG(svgTree)[0]:
+        for subpath in path.breakup():
+            points = subpath.getApproximatePoints(error=tolerance)
+            if len(points):
+                for i in range(len(points)):
+                    commands.append(Command(Command.MOVE_PEN_UP if i==0 else Command.MOVE_PEN_DOWN, point=(points[i].real,points[i].imag)))
+    return commands
+    
 if __name__ == '__main__':
     try:
         opts, args = getopt.getopt(sys.argv[1:], "rfdma:D:t:s:S:x:y:z:Z:p:f:F:u:", ["--allow-repeats", "--scale-to-fit",
@@ -237,7 +269,7 @@ if __name__ == '__main__':
         if len(args) != 1:
             raise getopt.GetoptError("invalid commandline")
 
-        tolerance = 0
+        tolerance = 0.05
         doDedup = True    
         scale = Scale()
         sendPort = None
@@ -298,7 +330,7 @@ if __name__ == '__main__':
                 plotter.drawSpeed = float(arg)
         
     except getopt.GetoptError:
-        sys.stderr.write("hpgl2gcode.py [options] inputfile [> output.gcode]\n")
+        sys.stderr.write("gcodeplot.py [options] inputfile [> output.gcode]\n")
         sys.stderr.write("""
  -h|--help: this
  -r|--allow-repeats: do not deduplicate paths [default: off]
@@ -307,7 +339,7 @@ if __name__ == '__main__':
  -m|--scale-manual: no scaling
  -a|--area=x1,y1,x2,y2: print area in millimeters
  -D|--input-dpi=xdpi[,ydpi]: hpgl dpi
- -t|--tolerance=x: skip moves of x millimeters or less
+ -t|--tolerance=x: ignore (some) deviations of x millimeters or less [default 0.05]
  -s|--send=port: send gcode to serial port instead of stdout
  -S|--send-speed=baud: set baud rate for sending
  -x|--align-x: set alignment to left(l), right(r) or center(c)
@@ -326,23 +358,30 @@ if __name__ == '__main__':
     with open(args[0]) as f:
         data = f.read()
         
-    try:
-        ET.fromstring(data)
-        svg = 'svg' in ET.parse(filename).tag
-    except:
-        svg = False
+    svgTree = None    
         
-    if not svg and 'PD' not in data and 'PU' not in data:
+    try:
+        svgTree = ET.fromstring(data)
+        if not 'svg' in svgTree.tag:
+            svgTree = None
+    except:
+        svgTree = None
+        
+    if svgTree is None and 'PD' not in data and 'PU' not in data:
         sys.stderr.write("Unrecognized file.\n")
         exit(1)
         
-    assert not svg # not yet supported
-        
-    commands = parseHPGL(data, dpi=dpi)
+    if svgTree is not None:
+        commands = parseSVG(svgTree, tolerance=tolerance)
+    else:
+        commands = parseHPGL(data, dpi=dpi)
+
+    commands = removePenBob(commands)    
     if doDedup:
         commands = dedup(commands)
-    g = emitGcode(dedup(commands), scale=scale, align=align, scalingMode=scalingMode, tolerance=tolerance, plotter=plotter)
-    if len(g)>0:
+        
+    g = emitGcode(commands, scale=scale, align=align, scalingMode=scalingMode, tolerance=tolerance, plotter=plotter)
+    if g:
         if sendPort is not None:
             import sendgcode
             sendgcode.sendGcode(port=sendPort, speed=115200, commands=g)
