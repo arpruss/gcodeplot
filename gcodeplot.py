@@ -1,19 +1,20 @@
-#!/usr/bin/python
+#!/usr/bin/pythons
 import re
 import sys
 import getopt
 import math
 import xml.etree.ElementTree as ET
-from svg.parser import getPathsFromSVG 
+from svgpath.parser import getPathsFromSVG 
 
 SCALE_NONE = 0
 SCALE_DOWN_ONLY = 1
-SCALE_BEST = 2
-ALIGN_BOTTOM = 0
-ALIGN_TOP = 1
+SCALE_FIT = 2
+ALIGN_NONE = 0
+ALIGN_BOTTOM = 1
+ALIGN_TOP = 2
 ALIGN_LEFT = ALIGN_BOTTOM
 ALIGN_RIGHT = ALIGN_TOP
-ALIGN_CENTER = 2
+ALIGN_CENTER = 3
 
 class Command(object):
     INIT = 0
@@ -72,8 +73,12 @@ class Scale(object):
                 o[i] = plotter.xyMin[i] - self.scale[i]*xyMin[i]
             elif align[i] == ALIGN_RIGHT:
                 o[i] = plotter.xyMax[i] - self.scale[i]*xyMax[i]
-            else:
+            elif align[i] == ALIGN_NONE:
+                o[i] = plotter.xyMin[i]
+            elif align[i] == ALIGN_CENTER:
                 o[i] = 0.5 * (plotter.xyMin[i] - self.scale[i]*xyMin[i] + plotter.xyMax[i] - self.scale[i]*xyMax[i])            
+            else:
+                raise ValueError()
         self.offset = tuple(o)
                 
         
@@ -240,7 +245,7 @@ def parseHPGL(data,dpi=(1016.,1016.)):
             try:
                 coords = map(float, cmd[2:].split(','))
                 for i in range(0,len(coords),2):
-                    commands.append(Command(Command.MOVE_PEN_UP, point=(coords[i]*scale[0], coords[i+1]*scale[1])))
+                    commands.append(Command(Command.MOVE_PEN_UP, point=(coords[i]*scale[0], pageLength-coords[i+1]*scale[1])))
             except:
                 pass 
                 # ignore no-movement PD/PU
@@ -262,8 +267,8 @@ def parseSVG(svgTree, tolerance=0.05):
     
 if __name__ == '__main__':
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "rfdma:D:t:s:S:x:y:z:Z:p:f:F:u:", ["--allow-repeats", "--scale-to-fit",
-                        "--scale-down", "--scale-manual", "--area=", '--align-x=', '--align-y=', 
+        opts, args = getopt.getopt(sys.argv[1:], "rf:dna:D:t:s:S:x:y:z:Z:p:f:F:u:", ["--allow-repeats", "--fit",
+                        "--area=", '--align-x=', '--align-y=', 
                         '--input-dpi=', '--tolerance=', '--send=', '--send-speed=', '--pen-down-z=', '--pen-up-z=', '--parking-z=',
                         '--pen-down-speed=', '--pen-up-speed=', '--z-speed=' ], )
         if len(args) != 1:
@@ -274,27 +279,33 @@ if __name__ == '__main__':
         scale = Scale()
         sendPort = None
         sendSpeed = 115200
-        scalingMode = SCALE_BEST
-        align = [ALIGN_LEFT, ALIGN_BOTTOM]
+        hpglLength = 279.4
+        scalingMode = SCALE_FIT
+        align = [ALIGN_NONE, ALIGN_NONE]
         plotter = Plotter()
         dpi = (1016., 1016.)
             
         for opt,arg in opts:
             if opt in ('-r','--allow-repeats'):
                 doDedup = False
-            elif opt in ('-f','--scale-to-fit'):
-                scalingMode = SCALE_BEST
-            elif opt in ('-d','--scale-down'):
-                scalingMode = SCALE_DOWN_ONLY
-            elif opt in ('-m','--scale-manual'):
-                scalingMode = SCALE_NONE
+            elif opt in ('-f','--scale-fit'):
+                if arg.startswith('n'):
+                    scalingMode = SCALE_NONE
+                elif arg.startswith('d'):
+                    scalingMode = SCALE_DOWN_ONLY
+                elif arg.startswith('f'):
+                    scalingMode = SCALE_FIT
             elif opt in ('-x','--align-x'):
                 if arg.startswith('l'):
                     align[0] = ALIGN_LEFT
                 elif arg.startswith('r'):
                     align[0] = ALIGN_RIGHT
                 elif arg.startswith('c'):
-                    align[0] =ALIGN_CENTER
+                    align[0] = ALIGN_CENTER
+                elif arg.startswith('n'):
+                    align[0] = ALIGN_NONE
+                else:
+                    raise ValueError()
             elif opt in ('-y','--align-y'):
                 if arg.startswith('b'):
                     align[1] = ALIGN_LEFT
@@ -302,6 +313,10 @@ if __name__ == '__main__':
                     align[1] = ALIGN_RIGHT
                 elif arg.startswith('c'):
                     align[1] = ALIGN_CENTER
+                elif arg.startswith('n'):
+                    align[1] = ALIGN_NONE
+                else:
+                    raise ValueError()
             elif opt in ('-t', '--tolerance'):
                 tolerance = float(arg)
             elif opt in ('-s', '--send'):
@@ -334,21 +349,19 @@ if __name__ == '__main__':
         sys.stderr.write("""
  -h|--help: this
  -r|--allow-repeats: do not deduplicate paths [default: off]
- -f|--scale-to-fit: scale to fit plotter area [default]
- -d|--scale-down: scale to fit plotter area only if too big
- -m|--scale-manual: no scaling
- -a|--area=x1,y1,x2,y2: print area in millimeters
+ -f|--scale=mode: scaling option: none(n), fit(f), down-only(d)
  -D|--input-dpi=xdpi[,ydpi]: hpgl dpi
  -t|--tolerance=x: ignore (some) deviations of x millimeters or less [default 0.05]
  -s|--send=port: send gcode to serial port instead of stdout
  -S|--send-speed=baud: set baud rate for sending
- -x|--align-x: set alignment to left(l), right(r) or center(c)
- -y|--align-y: set alignment to bottom(b), top(t) or center(c)
- -Z|--pen-up-z=z: set z-position for pen-up (millimeters)
- -z|--pen-down-z=z: set z-position for pen-down (millimeters)
- -p|--parking-z=z: set z-position for parking (millimeters)
- -Z|--pen-up-z=z: set z-position for pen-up (millimeters)
- -z|--pen-down-z=z: set z-position for pen-down (millimeters)
+ -x|--align-x=mode: horizontal alignment: none(n), left(l), right(r) or center(c)
+ -y|--align-y=mode: vertical alignment: none(n), bottom(b), top(t) or center(c)
+ -a|--area=x1,y1,x2,y2: gcode print area in millimeters
+ -Z|--pen-up-z=z: z-position for pen-up (millimeters)
+ -z|--pen-down-z=z: z-position for pen-down (millimeters)
+ -p|--parking-z=z: z-position for parking (millimeters)
+ -Z|--pen-up-z=z: z-position for pen-up (millimeters)
+ -z|--pen-down-z=z: z-position for pen-down (millimeters)
  -Z|--pen-up-speed=z: speed for moving with pen up (millimeters/second)
  -z|--pen-down-speed=z: speed for moving with pen down (millimeters/second)
  -u|--z-speed: speed for up/down movement (millimeters/second)
