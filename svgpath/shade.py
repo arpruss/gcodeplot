@@ -1,10 +1,10 @@
 import math
 from operator import itemgetter
 
-def shadePolygon(polygon, theta, spacing, evenOdd=True):
-    rotate = complex(math.cos(theta), math.sin(theta))
+def shadePolygon(polygon, angleDegrees, spacing, evenOdd=True):
+    rotate = complex(math.cos(angleDegrees * math.pi / 180.), math.sin(angleDegrees * math.pi / 180.))
     
-    rotated = [z / rotate for z in polygon]
+    polygon = [z / rotate for z in polygon]
     
     spacing = float(spacing)
 
@@ -24,14 +24,17 @@ def shadePolygon(polygon, theta, spacing, evenOdd=True):
                 largestLen = l
         deltaY = (toAvoid[largestIndex-1] + largestLen / 2.) % spacing
         
-    minY = min(z.real for z in polygon)
-    maxY = max(z.real for z in polygon)
+    minY = min(z.imag for z in polygon)
+    maxY = max(z.imag for z in polygon)
 
     lines = []
     
     y = minY + ( - minY ) % spacing + deltaY    
     
+    odd = False
+    
     while y < maxY:
+        thisLine = []
         intersections = []
         for i,z in enumerate(polygon[:-1]):
             z1 = polygon[i+1]
@@ -50,7 +53,7 @@ def shadePolygon(polygon, theta, spacing, evenOdd=True):
         
         if evenOdd:
             for i in range(0,len(intersections)-1,2):
-                lines.append((complex(intersections[i][0], y),complex(intersections[i+1][0], y)))
+                thisLine.append((complex(intersections[i][0], y),complex(intersections[i+1][0], y)))
         else:
             count = 0
             for i in range(0,len(intersections)-1):
@@ -59,13 +62,20 @@ def shadePolygon(polygon, theta, spacing, evenOdd=True):
                 else:
                     count -= 1
                 if count != 0:
-                    lines.append((complex(intersections[i][0], y),complex(intersections[i+1][0], y)))
-                    
+                    thisLine.append((complex(intersections[i][0], y),complex(intersections[i+1][0], y)))
+               
+        if odd:
+            lines += reversed([(l[1],l[0]) for l in thisLine])
+        else:
+            lines += thisLine
+        
+        odd = not odd
+            
         y += spacing
                    
     return [(line[0]*rotate, line[1]*rotate) for line in lines]
                     
 if __name__ == '__main__':
     polygon=(0+0j, 10+10j, 10+0j, 0+0j)
-    print(shadePolygon(polygon,0,1))
+    print(shadePolygon(polygon,90,1))
                     
