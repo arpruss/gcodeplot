@@ -4,6 +4,12 @@ import threading
 import os
 import re
 
+def sendHPGL(port, commands):
+    s = serial.Serial(port, 115200)
+    s.flushInput()
+    s.write(commands)
+    s.close()
+
 def sendGcode(port, commands, speed=115200, quiet = False):    
     class State(object):
         pass

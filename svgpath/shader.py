@@ -12,18 +12,21 @@ class Shader(object):
         self.angle = angle
         self.crossHatch = False
         
-    def shadePolygon(polygon, grayscale, mode=None):
+    def isActive(self):
+        return self.unshadedThreshold > 0.000001
+        
+    def shade(self, polygon, grayscale, mode=None):
         if mode is None:
             mode = Shader.MODE_EVEN_ODD
         if grayscale >= self.unshadedThreshold:
             return []
         intensity = (self.unshadedThreshold-grayscale) / float(self.unshadedThreshold)
         spacing = self.lightestSpacing * (1-intensity) + self.darkestSpacing * intensity
-        lines = shadePolygon(polygon, self.angle, spacing, mode=self.mode)
+        lines = Shader.shadePolygon(polygon, self.angle, spacing, mode=mode)
         if self.crossHatch:
-            lines += shadePolygon(polygon, self.angle+90, spacing, mode=self.mode)
+            lines += Shader.shadePolygon(polygon, self.angle+90, spacing, mode=mode)
         return lines
-
+        
     @staticmethod
     def shadePolygon(polygon, angleDegrees, spacing, mode=None):
         if mode is None:
@@ -31,11 +34,11 @@ class Shader(object):
     
         rotate = complex(math.cos(angleDegrees * math.pi / 180.), math.sin(angleDegrees * math.pi / 180.))
         
-        polygon = [z / rotate for z in polygon]
+        polygon = [(line[0] / rotate,line[1] / rotate) for line in polygon]
         
         spacing = float(spacing)
 
-        toAvoid = list(set(z.imag for z in polygon))
+        toAvoid = list(set(line[0].imag for line in polygon)|set(line[1].imag for line in polygon))
 
         if len(toAvoid) <= 1:
             deltaY = (toAvoid[0]-spacing/2.) % spacing
@@ -51,8 +54,8 @@ class Shader(object):
                     largestLen = l
             deltaY = (toAvoid[largestIndex-1] + largestLen / 2.) % spacing
             
-        minY = min(z.imag for z in polygon)
-        maxY = max(z.imag for z in polygon)
+        minY = min(min(line[0].imag,line[1].imag) for line in polygon)
+        maxY = max(max(line[0].imag,line[1].imag) for line in polygon)
 
         lines = []
         
@@ -63,8 +66,9 @@ class Shader(object):
         while y < maxY:
             thisLine = []
             intersections = []
-            for i,z in enumerate(polygon[:-1]):
-                z1 = polygon[i+1]
+            for line in polygon:
+                z = line[0]
+                z1 = line[1]
                 if z1.imag == y or z.imag == y: # roundoff generated corner case -- ignore -- TODO
                     break
                 if z1.imag < y < z.imag or z.imag < y < z1.imag:

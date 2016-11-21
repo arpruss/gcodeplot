@@ -1,4 +1,4 @@
-#!/usr/bin/pythons
+#!/usr/bin/python
 import re
 import sys
 import getopt
@@ -275,22 +275,36 @@ def emitHPGL(commands):
     hpgl.append('')
     return ';'.join(hpgl)
 
-def parseSVG(svgTree, tolerance=0.05):
+def parseSVG(svgTree, tolerance=0.05, shader=None):
     commands = []
     for path in getPathsFromSVG(svgTree)[0]:
+        lines = []
         for subpath in path.breakup():
             points = subpath.getApproximatePoints(error=tolerance)
             if len(points):
                 for i in range(len(points)):
                     commands.append(Command(Command.MOVE_PEN_UP if i==0 else Command.MOVE_PEN_DOWN, point=(points[i].real,points[i].imag)))
+                    if i > 0:
+                        lines.append((points[i-1],points[i]))
+        if shader is not None and shader.isActive() and hasattr(path, 'fill') and path.fill is not None:
+            grayscale = sum(path.fill) / 3. 
+            mode = Shader.MODE_NONZERO if path.fillRule == 'nonzero' else Shader.MODE_EVEN_ODD
+            if path.fillOpacity is not None:
+                grayscale *= path.fillOpacity # TODO: real alpha!
+            fillLines = shader.shade(lines, grayscale, mode=mode)
+            for line in fillLines:
+                commands.append(Command(Command.MOVE_PEN_UP, point=(line[0].real,line[0].imag)))
+                commands.append(Command(Command.MOVE_PEN_DOWN, point=(line[1].real,line[1].imag)))
+            
     return commands
     
 if __name__ == '__main__':
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "Hrf:dna:D:t:s:S:x:y:z:Z:p:f:F:u:", ["--allow-repeats", "--fit",
-                        "--area=", '--align-x=', '--align-y=', 
-                        '--input-dpi=', '--tolerance=', '--send=', '--send-speed=', '--pen-down-z=', '--pen-up-z=', '--parking-z=',
-                        '--pen-down-speed=', '--pen-up-speed=', '--z-speed=', '--hpgl-out' ], )
+        opts, args = getopt.getopt(sys.argv[1:], "T:M:m:A:XHrf:dna:D:t:s:S:x:y:z:Z:p:f:F:u:", ["allow-repeats", "fit",
+                        "area=", 'align-x=', 'align-y=', 
+                        'input-dpi=', 'tolerance=', 'send=', 'send-speed=', 'pen-down-z=', 'pen-up-z=', 'parking-z=',
+                        'pen-down-speed=', 'pen-up-speed=', 'z-speed=', 'hpgl-out', 'shading-threshold=',
+                        'shading-angle=', 'shading-crosshatch', 'shading-darkest=', 'shading-lightest='], )
         if len(args) != 1:
             raise getopt.GetoptError("invalid commandline")
 
@@ -308,16 +322,16 @@ if __name__ == '__main__':
         dpi = (1016., 1016.)
             
         for opt,arg in opts:
-            if opt in ('-r','--allow-repeats'):
+            if opt in ('-r', '--allow-repeats'):
                 doDedup = False
-            elif opt in ('-f','--scale-fit'):
+            elif opt in ('-f', '--scale-fit'):
                 if arg.startswith('n'):
                     scalingMode = SCALE_NONE
                 elif arg.startswith('d'):
                     scalingMode = SCALE_DOWN_ONLY
                 elif arg.startswith('f'):
                     scalingMode = SCALE_FIT
-            elif opt in ('-x','--align-x'):
+            elif opt in ('-x', '--align-x'):
                 if arg.startswith('l'):
                     align[0] = ALIGN_LEFT
                 elif arg.startswith('r'):
@@ -328,7 +342,7 @@ if __name__ == '__main__':
                     align[0] = ALIGN_NONE
                 else:
                     raise ValueError()
-            elif opt in ('-y','--align-y'):
+            elif opt in ('-y', '--align-y'):
                 if arg.startswith('b'):
                     align[1] = ALIGN_LEFT
                 elif arg.startswith('t'):
@@ -345,11 +359,11 @@ if __name__ == '__main__':
                 sendPort = arg
             elif opt in ('-S', '--send-speed'):
                 sendSpeed = int(arg)
-            elif opt in ('-a','--area'):
+            elif opt in ('-a', '--area'):
                 v = map(float, arg.split(','))
                 plotter.xyMin = (v[0],v[1])
                 plotter.xyMax = (v[2],v[3])
-            elif opt in ('-D','--input-dpi'):
+            elif opt in ('-D', '--input-dpi'):
                 v = map(float, arg.split(','))
                 if len(v) > 1:
                     dpi = v[0:2]
@@ -367,34 +381,44 @@ if __name__ == '__main__':
                 plotter.drawSpeed = float(arg)
             elif opt in ('-H', '--hpgl-out'):
                 hpglOut = True
+            elif opt in ('-T', '--shading-threshold'):
+                shader.unshadedThreshold = float(arg)
+            elif opt in ('-m', '--shading-lightest'):
+                shader.lightestSpacing = float(arg)
+            elif opt in ('-M', '--shading-darkest'):
+                shader.darkestSpacing = float(arg)
+            elif opt in ('-A', '--shading-angle'):
+                shader.angle = float(arg)
+            elif opt in ('-X', '--shading-crosshatch'):
+                shader.crossHatch = True
         
     except getopt.GetoptError:
         sys.stderr.write("gcodeplot.py [options] inputfile [> output.gcode]\n")
         sys.stderr.write("""
- -h|--help: this
- -r|--allow-repeats: do not deduplicate paths [default: off]
- -f|--scale=mode: scaling option: none(n), fit(f), down-only(d)
- -D|--input-dpi=xdpi[,ydpi]: hpgl dpi
- -t|--tolerance=x: ignore (some) deviations of x millimeters or less [default 0.05]
- -s|--send=port: send gcode to serial port instead of stdout
- -S|--send-speed=baud: set baud rate for sending
- -x|--align-x=mode: horizontal alignment: none(n), left(l), right(r) or center(c)
- -y|--align-y=mode: vertical alignment: none(n), bottom(b), top(t) or center(c)
- -a|--area=x1,y1,x2,y2: gcode print area in millimeters
- -Z|--pen-up-z=z: z-position for pen-up (millimeters)
- -z|--pen-down-z=z: z-position for pen-down (millimeters)
- -p|--parking-z=z: z-position for parking (millimeters)
- -Z|--pen-up-z=z: z-position for pen-up (millimeters)
- -z|--pen-down-z=z: z-position for pen-down (millimeters)
- -Z|--pen-up-speed=z: speed for moving with pen up (millimeters/second)
- -z|--pen-down-speed=z: speed for moving with pen down (millimeters/second)
- -u|--z-speed: speed for up/down movement (millimeters/second)
- -H|--hpgl-out: output is HPGL, not gcode; most options ignored [default: off]
-TODO -T|--shading-threshold=n: maximum darkness to left unshaded (decimal, 0. to 1.) [default 1.0]
-TODO -m|--shading-lightest=x: shading spacing for lightest colors (millimeters) [default 3.0]
-TODO -M|--shading-darkest=x: shading spacing for darkest color (millimeters) [default 0.5]
-TODO -A|--shading-angle=x: shading angle (degrees) [default 45]
-TODO -X|--shading-crosshatch: cross hatch shading [default: off]
+ -h|help: this
+ -r|allow-repeats: do not deduplicate paths [default: off]
+ -f|scale=mode: scaling option: none(n), fit(f), down-only(d)
+ -D|input-dpi=xdpi[,ydpi]: hpgl dpi
+ -t|tolerance=x: ignore (some) deviations of x millimeters or less [default 0.05]
+ -s|send=port: send gcode to serial port instead of stdout
+ -S|send-speed=baud: set baud rate for sending
+ -x|align-x=mode: horizontal alignment: none(n), left(l), right(r) or center(c)
+ -y|align-y=mode: vertical alignment: none(n), bottom(b), top(t) or center(c)
+ -a|area=x1,y1,x2,y2: gcode print area in millimeters
+ -Z|pen-up-z=z: z-position for pen-up (millimeters)
+ -z|pen-down-z=z: z-position for pen-down (millimeters)
+ -p|parking-z=z: z-position for parking (millimeters)
+ -Z|pen-up-z=z: z-position for pen-up (millimeters)
+ -z|pen-down-z=z: z-position for pen-down (millimeters)
+ -Z|pen-up-speed=z: speed for moving with pen up (millimeters/second)
+ -z|pen-down-speed=z: speed for moving with pen down (millimeters/second)
+ -u|z-speed: speed for up/down movement (millimeters/second)
+ -H|hpgl-out: output is HPGL, not gcode; most options ignored [default: off]
+ -T|shading-threshold=n: darkest grayscale to leave unshaded (decimal, 0. to 1.; set to 0 to turn off SVG shading) [default 1.0]
+ -m|shading-lightest=x: shading spacing for lightest colors (millimeters) [default 3.0]
+ -M|shading-darkest=x: shading spacing for darkest color (millimeters) [default 0.5]
+ -A|shading-angle=x: shading angle (degrees) [default 45]
+ -X|shading-crosshatch: cross hatch shading [default: off]
 """)
         sys.exit(2)
 
@@ -415,7 +439,7 @@ TODO -X|--shading-crosshatch: cross hatch shading [default: off]
         exit(1)
         
     if svgTree is not None:
-        commands = parseSVG(svgTree, tolerance=tolerance)
+        commands = parseSVG(svgTree, tolerance=tolerance, shader=shader)
     else:
         commands = parseHPGL(data, dpi=dpi)
 
