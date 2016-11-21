@@ -359,7 +359,9 @@ def sizeFromString(text):
 
 def rgbFromColor(colorName):
     colorName = re.sub(r'\s+', r'', colorName.lower())
-    if colorName.startswith('rgb('):
+    if colorName == 'none':
+        return None
+    elif colorName.startswith('rgb('):
         colors = re.split(r'[\)\,]', colorName[4:])[:3]
         outColor = []
         for c in colors:
@@ -375,33 +377,53 @@ def rgbFromColor(colorName):
             return (int(colorName[1:3],16)/255., int(colorName[3:5],16)/255., int(colorName[5:7],16)/255.)
     else:
         return SVG_COLORS[colorName]        
-            
+        
+        
+class SVGState(object):
+    def __init__(self, fill=None, fillOpacity=None, fillRule=None, stroke=(0.,0.,0.), strokeOpacity=None):
+        self.fill = fill
+        self.fillOpacity = fillOpacity
+        self.fillRule = fillRule
+        self.stroke = stroke
+        self.strokeOpacity = strokeOpacity
+                
+    def clone(self):
+        return SVGState(fill=self.fill, fillOpacity=self.fillOpacity, fillRule=self.fillRule, stroke=self.stroke, strokeOpacity=self.strokeOpacity)
+        
 def getPathsFromSVG(svg,yGrowsUp=True):
     paths = []
+    
+    def updateState(tree,state):
+        state = state.clone()
+        try:
+            style = re.sub(r'\s',r'', tree.attrib['style']).lower()
+            for item in style.split(';'):
+                cmd,arg = item.split(':')[:2]
+                if cmd == 'fill':
+                    state.fill = rgbFromColor(arg)
+                elif cmd == 'fill-opacity':
+                    state.fillOpacity = float(arg)
+                elif cmd == 'fill-rule':
+                    state.fillRule = arg
+                elif cmd == 'stroke':
+                    state.stroke = rgbFromColor(arg)
+                elif cmd == 'stroke-opacity':
+                    state.strokeOpacity = rgbFromColor(arg)
+        except:
+            pass
+            
+        return state
 
-    def getPaths(paths, scaler, tree):
+    def getPaths(paths, scaler, tree, state):
         tag = re.sub(r'.*}', '', tree.tag)
+        state = updateState(tree, state)
         if tag == 'path':
             path = parse_path(tree.attrib['d'], scaler=scaler)
-            path.fill = None
-            path.fillRule = None
-            path.fillOpacity = None
-            try:
-                style = re.sub(r'\s',r'', tree.attrib['style']).lower()
-                for item in style.split(';'):
-                    cmd,arg = item.split(':')[:2]
-                    if cmd == 'fill':
-                        path.fill = rgbFromColor(arg)
-                    elif cmd == 'fill-opacity':
-                        path.fillOpacity = float(arg)
-                    elif cmd == 'fill-rule':
-                        path.fillRule = arg
-            except:
-                pass
+            path.svgState = state
             paths.append(path)
         else:
             for child in tree:
-                getPaths(paths, scaler, child)
+                getPaths(paths, scaler, child, state)
 
     def scale(width, height, viewBox, z):
         x = (z.real - viewBox[0]) / (viewBox[2] - viewBox[0]) * width
@@ -415,7 +437,7 @@ def getPathsFromSVG(svg,yGrowsUp=True):
     height = sizeFromString(svg.attrib['height'])
     viewBox = map(float, re.split(r'[\s,]+', svg.attrib['viewBox']))
     scaler = lambda z : scale(width, height, viewBox, z)
-    getPaths(paths, scaler, svg)
+    getPaths(paths, scaler, svg, SVGState())
     return paths, scaler(complex(viewBox[0], viewBox[1])), scaler(complex(viewBox[2], viewBox[3]))
 
 def getPathsFromSVGFile(filename,yGrowsUp=True):
