@@ -443,6 +443,14 @@ class Path(MutableSequence):
     def getApproximatePoints(self, error=0.001, max_depth=32):
         return approximate(self, 0., 1., self.point(0.), self.point(1.), error, 0, max_depth)
 
+    def getApproximateLines(self, error=0.001, max_depth=32):
+        lines = []
+        for subpath in self.breakup():
+            points = subpath.getApproximatePoints(error=error, max_depth=max_depth)
+            for i in range(len(points)-1):
+                lines.append(points[i],points[i+1])
+        return lines
+
     @property
     def closed(self):
         """Checks that the path is closed"""

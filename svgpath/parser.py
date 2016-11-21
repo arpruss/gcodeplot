@@ -383,19 +383,19 @@ def getPathsFromSVG(svg,yGrowsUp=True):
         tag = re.sub(r'.*}', '', tree.tag)
         if tag == 'path':
             path = parse_path(tree.attrib['d'], scaler=scaler)
-            path.fillColor = None
+            path.fill = None
             path.fillRule = None
             path.fillOpacity = None
             try:
-                path.fillColor = rgbFromColor(tree.attrib['fill'])
-            except:
-                pass
-            try:
-                path.fillRule = tree.attrib['fill-rule'].lower()
-            except:
-                pass
-            try:
-                path.fillOpacity = float(tree.attrib['fill-opacity'])
+                style = re.sub(r'\s',r'', tree.attrib['style']).lower()
+                for item in style.split(';'):
+                    cmd,arg = item.split(':')[:2]
+                    if cmd == 'fill':
+                        path.fill = rgbFromColor(arg)
+                    elif cmd == 'fill-opacity':
+                        path.fillOpacity = float(arg)
+                    elif cmd == 'fill-rule':
+                        path.fillRule = arg
             except:
                 pass
             paths.append(path)
@@ -416,7 +416,7 @@ def getPathsFromSVG(svg,yGrowsUp=True):
     viewBox = map(float, re.split(r'[\s,]+', svg.attrib['viewBox']))
     scaler = lambda z : scale(width, height, viewBox, z)
     getPaths(paths, scaler, svg)
-    return paths, scaler(complex(viewBox[0], viewBox[1])), scaler(complex(viewBox[0], viewBox[1])) 
+    return paths, scaler(complex(viewBox[0], viewBox[1])), scaler(complex(viewBox[2], viewBox[3]))
 
 def getPathsFromSVGFile(filename,yGrowsUp=True):
     return getPathsFromSVG(ET.parse(filename).getroot(),yGrowsUp=yGrowsUp)
