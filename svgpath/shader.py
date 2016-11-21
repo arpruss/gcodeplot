@@ -12,7 +12,9 @@ class Shader(object):
         self.angle = angle
         self.crossHatch = False
         
-    def shadePolygon(polygon, grayscale, mode=Shader.MODE_EVEN_ODD):
+    def shadePolygon(polygon, grayscale, mode=None):
+        if mode is None:
+            mode = Shader.MODE_EVEN_ODD
         if grayscale >= self.unshadedThreshold:
             return []
         intensity = (self.unshadedThreshold-grayscale) / float(self.unshadedThreshold)
@@ -23,7 +25,10 @@ class Shader(object):
         return lines
 
     @staticmethod
-    def shadePolygon(polygon, angleDegrees, spacing, mode=Shader.MODE_EVEN_ODD):
+    def shadePolygon(polygon, angleDegrees, spacing, mode=None):
+        if mode is None:
+            mode = Shader.MODE_EVEN_ODD
+    
         rotate = complex(math.cos(angleDegrees * math.pi / 180.), math.sin(angleDegrees * math.pi / 180.))
         
         polygon = [z / rotate for z in polygon]

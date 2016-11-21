@@ -255,6 +255,25 @@ def parseHPGL(data,dpi=(1016.,1016.)):
         elif len(cmd) > 0:
             sys.stderr.write('Unknown command '+cmd[:2]+'\n')
     return commands    
+    
+def hpglCoordinates(point):
+    x = point[0] * 1016. / 25.4
+    y = point[1] * 1016. / 25.4
+    return str(int(round(x)))+','+str(int(round(y)))
+
+def emitHPGL(commands):
+    hpgl = []
+    hpgl.append('IN')
+    for c in commands:
+        if c.command == Command.MOVE_PEN_UP:
+            hpgl.append('PU'+hpglCoordinates(c.point)) 
+        elif c.command == Command.MOVE_PEN_DOWN:
+            hpgl.append('PD'+hpglCoordinates(c.point)) 
+        else:
+            continue
+    hpgl.append('PU')
+    hpgl.append('')
+    return ';'.join(hpgl)
 
 def parseSVG(svgTree, tolerance=0.05):
     commands = []
@@ -268,10 +287,10 @@ def parseSVG(svgTree, tolerance=0.05):
     
 if __name__ == '__main__':
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "rf:dna:D:t:s:S:x:y:z:Z:p:f:F:u:", ["--allow-repeats", "--fit",
+        opts, args = getopt.getopt(sys.argv[1:], "Hrf:dna:D:t:s:S:x:y:z:Z:p:f:F:u:", ["--allow-repeats", "--fit",
                         "--area=", '--align-x=', '--align-y=', 
                         '--input-dpi=', '--tolerance=', '--send=', '--send-speed=', '--pen-down-z=', '--pen-up-z=', '--parking-z=',
-                        '--pen-down-speed=', '--pen-up-speed=', '--z-speed=' ], )
+                        '--pen-down-speed=', '--pen-up-speed=', '--z-speed=', '--hpgl-out' ], )
         if len(args) != 1:
             raise getopt.GetoptError("invalid commandline")
 
@@ -285,6 +304,7 @@ if __name__ == '__main__':
         shader = Shader()
         align = [ALIGN_NONE, ALIGN_NONE]
         plotter = Plotter()
+        hpglOut = False
         dpi = (1016., 1016.)
             
         for opt,arg in opts:
@@ -345,6 +365,8 @@ if __name__ == '__main__':
                 plotter.moveSpeed = float(arg)
             elif opt in ('-f', '--pen-down-speed'):
                 plotter.drawSpeed = float(arg)
+            elif opt in ('-H', '--hpgl-out'):
+                hpglOut = True
         
     except getopt.GetoptError:
         sys.stderr.write("gcodeplot.py [options] inputfile [> output.gcode]\n")
@@ -367,11 +389,12 @@ if __name__ == '__main__':
  -Z|--pen-up-speed=z: speed for moving with pen up (millimeters/second)
  -z|--pen-down-speed=z: speed for moving with pen down (millimeters/second)
  -u|--z-speed: speed for up/down movement (millimeters/second)
- -T|--shading-threshold=n: maximum darkness to left unshaded (decimal, 0. to 1.) [default 1.0]
- -m|--shading-lightest=x: shading spacing for lightest colors (millimeters) [default 3.0]
- -M|--shading-darkest=x: shading spacing for darkest color (millimeters) [default 0.5]
- -A|--shading-angle=x: shading angle (degrees) [default 45]
- -X|--shading-crosshatch: cross hatch shading [default: off]
+ -H|--hpgl-out: output is HPGL, not gcode; most options ignored [default: off]
+TODO -T|--shading-threshold=n: maximum darkness to left unshaded (decimal, 0. to 1.) [default 1.0]
+TODO -m|--shading-lightest=x: shading spacing for lightest colors (millimeters) [default 3.0]
+TODO -M|--shading-darkest=x: shading spacing for darkest color (millimeters) [default 0.5]
+TODO -A|--shading-angle=x: shading angle (degrees) [default 45]
+TODO -X|--shading-crosshatch: cross hatch shading [default: off]
 """)
         sys.exit(2)
 
@@ -399,14 +422,23 @@ if __name__ == '__main__':
     commands = removePenBob(commands)    
     if doDedup:
         commands = dedup(commands)
-        
-    g = emitGcode(commands, scale=scale, align=align, scalingMode=scalingMode, tolerance=tolerance, plotter=plotter)
+
+    if hpglOut:
+        g = emitHPGL(commands)
+    else:    
+        g = emitGcode(commands, scale=scale, align=align, scalingMode=scalingMode, tolerance=tolerance, plotter=plotter)
     if g:
         if sendPort is not None:
             import sendgcode
-            sendgcode.sendGcode(port=sendPort, speed=115200, commands=g)
+            if hpglOut:
+                sendgcode.sendHPGL(port=sendPort, speed=115200, commands=g)
+            else:
+                sendgcode.sendGcode(port=sendPort, speed=115200, commands=g)
         else:    
-            print('\n'.join(g))
+            if hpglOut:
+                sys.stdout.write(g)
+            else:
+                print('\n'.join(g))
     else:
         sys.stderr.write("No points.")
         sys.exit(1)

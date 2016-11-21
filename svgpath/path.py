@@ -44,7 +44,6 @@ def approximate(path, start, end, start_point, end_point, max_error, depth, max_
                     approximate(path, mid, end, mid_point, end_point, max_error, depth+1, max_depth) )
 
 class Line(object):
-
     def __init__(self, start, end):
         self.start = start
         self.end = end
