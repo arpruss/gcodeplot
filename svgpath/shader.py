@@ -5,7 +5,7 @@ class Shader(object):
     MODE_EVEN_ODD = 0
     MODE_NONZERO = 1
 
-    def __init__(self, unshadedThreshold=1., lightestSpacing=2., darkestSpacing=0.5, angle=45, crossHatch=False):
+    def __init__(self, unshadedThreshold=1., lightestSpacing=3., darkestSpacing=0.5, angle=45, crossHatch=False):
         self.unshadedThreshold = unshadedThreshold
         self.lightestSpacing = lightestSpacing
         self.darkestSpacing = darkestSpacing

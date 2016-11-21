@@ -5,6 +5,7 @@ import getopt
 import math
 import xml.etree.ElementTree as ET
 from svgpath.parser import getPathsFromSVG 
+from svgpath.shader import Shader
 
 SCALE_NONE = 0
 SCALE_DOWN_ONLY = 1
@@ -281,6 +282,7 @@ if __name__ == '__main__':
         sendSpeed = 115200
         hpglLength = 279.4
         scalingMode = SCALE_FIT
+        shader = Shader()
         align = [ALIGN_NONE, ALIGN_NONE]
         plotter = Plotter()
         dpi = (1016., 1016.)
@@ -365,6 +367,11 @@ if __name__ == '__main__':
  -Z|--pen-up-speed=z: speed for moving with pen up (millimeters/second)
  -z|--pen-down-speed=z: speed for moving with pen down (millimeters/second)
  -u|--z-speed: speed for up/down movement (millimeters/second)
+ -T|--shading-threshold=n: maximum darkness to left unshaded (decimal, 0. to 1.) [default 1.0]
+ -m|--shading-lightest=x: shading spacing for lightest colors (millimeters) [default 3.0]
+ -M|--shading-darkest=x: shading spacing for darkest color (millimeters) [default 0.5]
+ -A|--shading-angle=x: shading angle (degrees) [default 45]
+ -X|--shading-crosshatch: cross hatch shading [default: off]
 """)
         sys.exit(2)
 
