@@ -34,7 +34,7 @@
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
      inkscape:zoom="0.35"
-     inkscape:cx="-479.28571"
+     inkscape:cx="-507.52531"
      inkscape:cy="520"
      inkscape:document-units="px"
      inkscape:current-layer="layer1"
@@ -148,5 +148,10 @@
          style="font-weight:bold;font-size:50px"
          id="path3377" />
     </g>
+    <path
+       inkscape:connector-curvature="0"
+       d="m 597.53984,105.79108 0,344.57082 67.77745,-2.78196 0,-263.9862 z"
+       style="fill:#d7d7ff;fill-rule:evenodd;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:round;stroke-opacity:1"
+       id="path3378-9" />
   </g>
 </svg>

@@ -35,13 +35,36 @@ def approximate(path, start, end, start_point, end_point, max_error, depth, max_
     # Worst case deviation given a fixed linear_length and actual_length would probably be 
     # a symmetric tent shape (I haven't proved it -- TODO).
     deviationSquared = (actual_length/2)**2 - (linear_length/2)**2
-    if deviationSquared <= 0 or deviationSquared <= max_error ** 2:
+    if deviationSquared <= max_error ** 2:
         return [start_point, end_point]
     else:
         mid = (start+end)/2.
         mid_point = path.point(mid)
         return ( approximate(path, start, mid, start_point, mid_point, max_error, depth+1, max_depth)[:-1] + 
                     approximate(path, mid, end, mid_point, end_point, max_error, depth+1, max_depth) )
+
+def length(points, a, b):
+    return sum(abs(points[i+1]-points[i]) for i in range(a,b))
+                    
+def removeCollinear(points, error):
+    out = []
+    
+    i = 0
+    
+    while i < len(points):
+        j = len(points) - 1
+        while i < j:
+            deviationSquared = (length(points, i, j)/2)**2 - (abs(points[j]-points[i])/2)**2
+            if deviationSquared <= error ** 2:
+                out.append(points[i])
+                i = j
+                break
+            j -= 1
+        out.append(points[j])
+        i += 1
+        
+    return out
+        
 
 class Line(object):
     def __init__(self, start, end):
@@ -440,7 +463,7 @@ class Path(MutableSequence):
         return paths
         
     def getApproximatePoints(self, error=0.001, max_depth=32):
-        return approximate(self, 0., 1., self.point(0.), self.point(1.), error, 0, max_depth)
+        return removeCollinear(approximate(self, 0., 1., self.point(0.), self.point(1.), error*.98, 0, max_depth), error*.02)
 
     def getApproximateLines(self, error=0.001, max_depth=32):
         lines = []

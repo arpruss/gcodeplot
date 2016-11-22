@@ -15,20 +15,21 @@ class Shader(object):
     def isActive(self):
         return self.unshadedThreshold > 0.000001
         
-    def shade(self, polygon, grayscale, mode=None):
+    def shade(self, polygon, grayscale, avoidOutline=True, mode=None):
         if mode is None:
             mode = Shader.MODE_EVEN_ODD
         if grayscale >= self.unshadedThreshold:
             return []
         intensity = (self.unshadedThreshold-grayscale) / float(self.unshadedThreshold)
         spacing = self.lightestSpacing * (1-intensity) + self.darkestSpacing * intensity
-        lines = Shader.shadePolygon(polygon, self.angle, spacing, mode=mode)
+        lines = Shader.shadePolygon(polygon, self.angle, spacing, avoidOutline=avoidOutline, mode=mode)
         if self.crossHatch:
-            lines += Shader.shadePolygon(polygon, self.angle+90, spacing, mode=mode)
+            lines += Shader.shadePolygon(polygon, self.angle+90, spacing, avoidOutline=avoidOutline, mode=mode)
         return lines
         
     @staticmethod
-    def shadePolygon(polygon, angleDegrees, spacing, mode=None):
+    def shadePolygon(polygon, angleDegrees, spacing, avoidOutline=True, mode=None):
+    
         if mode is None:
             mode = Shader.MODE_EVEN_ODD
     
@@ -57,14 +58,13 @@ class Shader(object):
         minY = min(min(line[0].imag,line[1].imag) for line in polygon)
         maxY = max(max(line[0].imag,line[1].imag) for line in polygon)
 
-        lines = []
-        
         y = minY + ( - minY ) % spacing + deltaY    
         
         odd = False
+
+        all = []
         
         while y < maxY:
-            thisLine = []
             intersections = []
             for line in polygon:
                 z = line[0]
@@ -73,18 +73,19 @@ class Shader(object):
                     break
                 if z1.imag < y < z.imag or z.imag < y < z1.imag:
                     if z1.real == z.real:
-                        intersections.append((z.real,z1.imag<y))
+                        intersections.append(( complex(z.real, y), z1.imag<y, line))
                     else:
                         m = (z1.imag-z.imag)/(z1.real-z.real)
                         # m * (x - z.real) = y - z.imag
                         # so: x = (y - z.imag) / m + z.real
-                        intersections.append( ((y-z.imag)/m + z.real,z.imag<y) )
+                        intersections.append( (complex((y-z.imag)/m + z.real, y), z.imag<y, line) )
         
-            intersections.sort(key=itemgetter(0))
+            intersections.sort(key=lambda datum: datum[0].real)
             
+            thisLine = []
             if mode == Shader.MODE_EVEN_ODD:
                 for i in range(0,len(intersections)-1,2):
-                    thisLine.append((complex(intersections[i][0], y),complex(intersections[i+1][0], y)))
+                    thisLine.append((intersections[i], intersections[i+1]))
             elif mode == Shader.MODE_NONZERO:
                 count = 0
                 for i in range(0,len(intersections)-1):
@@ -93,20 +94,24 @@ class Shader(object):
                     else:
                         count -= 1
                     if count != 0:
-                        thisLine.append((complex(intersections[i][0], y),complex(intersections[i+1][0], y)))
+                        thisLine.append((intersections[i], intersections[i+1]))
             else:
                 raise ValueError()
                    
             if odd:
-                lines += reversed([(l[1],l[0]) for l in thisLine])
-            else:
-                lines += thisLine
+                thisLine = list(reversed([(l[1],l[0]) for l in thisLine]))
+                
+            if not avoidOutline and len(thisLine) and len(all) and all[-1][1][2] == thisLine[0][0][2]:
+                # follow along outline to avoid an extra pen bob
+                all.append( (all[-1][1], thisLine[0][0]) )
+                
+            all += thisLine
             
             odd = not odd
                 
             y += spacing
-                       
-        return [(line[0]*rotate, line[1]*rotate) for line in lines]
+
+        return [(line[0][0]*rotate, line[1][0]*rotate) for line in all]
     
                     
 if __name__ == '__main__':

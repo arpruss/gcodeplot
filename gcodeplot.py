@@ -279,7 +279,6 @@ def parseSVG(svgTree, tolerance=0.05, shader=None, strokeAll=False):
     commands = []
     for path in getPathsFromSVG(svgTree)[0]:
         lines = []
-#        print path.svgState.fill
         stroke = strokeAll or not hasattr(path, 'svgState') or path.svgState.stroke is not None
         for subpath in path.breakup():
             points = subpath.getApproximatePoints(error=tolerance)
@@ -294,7 +293,7 @@ def parseSVG(svgTree, tolerance=0.05, shader=None, strokeAll=False):
             mode = Shader.MODE_NONZERO if path.svgState.fillRule == 'nonzero' else Shader.MODE_EVEN_ODD
             if path.svgState.fillOpacity is not None:
                 grayscale *= path.svgState.fillOpacity # TODO: real alpha!
-            fillLines = shader.shade(lines, grayscale, mode=mode)
+            fillLines = shader.shade(lines, grayscale, avoidOutline=(path.svgState.stroke is None), mode=mode)
             for line in fillLines:
                 commands.append(Command(Command.MOVE_PEN_UP, point=(line[0].real,line[0].imag)))
                 commands.append(Command(Command.MOVE_PEN_DOWN, point=(line[1].real,line[1].imag)))
@@ -338,12 +337,13 @@ if __name__ == '__main__':
     dpi = (1016., 1016.)
     
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "c:LT:M:m:A:XHrf:dna:D:t:s:S:x:y:z:Z:p:f:F:u:", 
-                        ["allow-repeats", "no-allow-repeats", "scale", "config-file=",
+        opts, args = getopt.getopt(sys.argv[1:], "Oc:LT:M:m:A:XHrf:dna:D:t:s:S:x:y:z:Z:p:f:F:u:", 
+                        ["allow-repeats", "no-allow-repeats", "scale=", "config-file=",
                         "area=", 'align-x=', 'align-y=', 
                         'input-dpi=', 'tolerance=', 'send=', 'send-speed=', 'pen-down-z=', 'pen-up-z=', 'parking-z=',
-                        'pen-down-speed=', 'pen-up-speed=', 'z-speed=', 'hpgl-out', 'shading-threshold=',
-                        'shading-angle=', 'shading-crosshatch', 'shading-darkest=', 'shading-lightest=', 'stroke-all'], )
+                        'pen-down-speed=', 'pen-up-speed=', 'z-speed=', 'hpgl-out', 'no-hpgl-out', 'shading-threshold=',
+                        'shading-angle=', 'shading-crosshatch', 'no-shading-crosshatch', 'shading-avoid-outline', 
+                        'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all'], )
         if len(args) != 1:
             raise getopt.GetoptError("invalid commandline")
 
@@ -423,6 +423,10 @@ if __name__ == '__main__':
                 shader.angle = float(arg)
             elif opt in ('-X', '--shading-crosshatch'):
                 shader.crossHatch = True
+            elif opt in ('-O', '--shading-avoid-outline'):
+                avoidOutline = True
+            elif opt == '--no-shading-avoid-outline':
+                avoidOutline = False
             elif opt == '--no-shading-crosshatch':
                 shader.crossHatch = False
             elif opt in ('-L', '--stroke-all'):
@@ -464,6 +468,7 @@ if __name__ == '__main__':
  -A|--shading-angle=x: shading angle (degrees) [default 45]
  -X|--shading-crosshatch*: cross hatch shading
  -L|--stroke-all*: stroke even regions specified by SVG to have no stroke
+ -O|--shading-avoid-outline*: avoid going over outline twice when shading
  -c|--config-file=filename: read arguments, one per line, from filename
  
  The options with an asterisk are default off and can be turned off again by adding "no-" at the beginning to the long-form option, e.g., --no-stroke-all.
