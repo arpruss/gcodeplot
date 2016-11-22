@@ -254,7 +254,7 @@ def parseHPGL(data,dpi=(1016.,1016.)):
             commands.append(Command(Command.INIT))
         elif len(cmd) > 0:
             sys.stderr.write('Unknown command '+cmd[:2]+'\n')
-    return commands    
+    return removePenBob(commands)
     
 def hpglCoordinates(point):
     x = point[0] * 1016. / 25.4
@@ -279,16 +279,16 @@ def parseSVG(svgTree, tolerance=0.05, shader=None, strokeAll=False):
     commands = []
     for path in getPathsFromSVG(svgTree)[0]:
         lines = []
-        stroke = strokeAll or not hasattr(path, 'svgState') or path.svgState.stroke is not None
-        for subpath in path.breakup():
-            points = subpath.getApproximatePoints(error=tolerance)
-            if len(points):
-                for i in range(len(points)):
-                    if stroke:
-                        commands.append(Command(Command.MOVE_PEN_UP if i==0 else Command.MOVE_PEN_DOWN, point=(points[i].real,points[i].imag)))
-                    if i > 0:
-                        lines.append((points[i-1],points[i]))
-        if shader is not None and shader.isActive() and hasattr(path, 'svgState') and path.svgState.fill is not None:
+        
+        stroke = strokeAll or path.svgState.stroke is not None
+        
+        for line in path.linearApproximation(error=tolerance):
+            if stroke:
+                commands.append(Command(Command.MOVE_PEN_UP, point=(line.start.real,line.start.imag)))
+                commands.append(Command(Command.MOVE_PEN_DOWN, point=(line.end.real,line.end.imag)))
+            lines.append((line.start, line.end))
+
+        if shader is not None and shader.isActive() and path.svgState.fill is not None:
             grayscale = sum(path.svgState.fill) / 3. 
             mode = Shader.MODE_NONZERO if path.svgState.fillRule == 'nonzero' else Shader.MODE_EVEN_ODD
             if path.svgState.fillOpacity is not None:
@@ -298,7 +298,7 @@ def parseSVG(svgTree, tolerance=0.05, shader=None, strokeAll=False):
                 commands.append(Command(Command.MOVE_PEN_UP, point=(line[0].real,line[0].imag)))
                 commands.append(Command(Command.MOVE_PEN_DOWN, point=(line[1].real,line[1].imag)))
             
-    return commands
+    return removePenBob(commands)
     
 def getConfigOpts(filename):
     opts = []
@@ -496,7 +496,6 @@ if __name__ == '__main__':
     else:
         commands = parseHPGL(data, dpi=dpi)
 
-    commands = removePenBob(commands)    
     if doDedup:
         commands = dedup(commands)
 

@@ -379,17 +379,6 @@ def rgbFromColor(colorName):
         return SVG_COLORS[colorName]        
         
         
-class SVGState(object):
-    def __init__(self, fill=None, fillOpacity=None, fillRule=None, stroke=(0.,0.,0.), strokeOpacity=None):
-        self.fill = fill
-        self.fillOpacity = fillOpacity
-        self.fillRule = fillRule
-        self.stroke = stroke
-        self.strokeOpacity = strokeOpacity
-                
-    def clone(self):
-        return SVGState(fill=self.fill, fillOpacity=self.fillOpacity, fillRule=self.fillRule, stroke=self.stroke, strokeOpacity=self.strokeOpacity)
-        
 def getPathsFromSVG(svg,yGrowsUp=True):
     paths = []
     
@@ -437,7 +426,7 @@ def getPathsFromSVG(svg,yGrowsUp=True):
     height = sizeFromString(svg.attrib['height'])
     viewBox = map(float, re.split(r'[\s,]+', svg.attrib['viewBox']))
     scaler = lambda z : scale(width, height, viewBox, z)
-    getPaths(paths, scaler, svg, SVGState())
+    getPaths(paths, scaler, svg, path.SVGState())
     return paths, scaler(complex(viewBox[0], viewBox[1])), scaler(complex(viewBox[2], viewBox[3]))
 
 def getPathsFromSVGFile(filename,yGrowsUp=True):

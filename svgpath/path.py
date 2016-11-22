@@ -46,7 +46,7 @@ def approximate(path, start, end, start_point, end_point, max_error, depth, max_
 def length(points, a, b):
     return sum(abs(points[i+1]-points[i]) for i in range(a,b))
                     
-def removeCollinear(points, error):
+def removeCollinear(points, error, pointsToKeep=set()):
     out = []
     
     i = 0
@@ -55,7 +55,7 @@ def removeCollinear(points, error):
         j = len(points) - 1
         while i < j:
             deviationSquared = (length(points, i, j)/2)**2 - (abs(points[j]-points[i])/2)**2
-            if deviationSquared <= error ** 2:
+            if deviationSquared <= error ** 2 and set(range(i+1,j)).isdisjoint(pointsToKeep):
                 out.append(points[i])
                 i = j
                 break
@@ -64,12 +64,22 @@ def removeCollinear(points, error):
         i += 1
         
     return out
-        
 
-class Line(object):
+class Segment(object):
     def __init__(self, start, end):
         self.start = start
         self.end = end
+        
+    def measure(self, start, end, error=ERROR, min_depth=MIN_DEPTH):
+        return Path(self).measure(start, end, error=error, min_depth=min_depth)
+
+    def getApproximatePoints(self, error=0.001, max_depth=32):
+        points = approximate(self, 0., 1., self.point(0.), self.point(1.), error, 0, max_depth)
+        return points
+
+class Line(Segment):
+    def __init__(self, start, end):
+        super(Line, self).__init__(start,end)
 
     def __repr__(self):
         return 'Line(start=%s, end=%s)' % (self.start, self.end)
@@ -83,8 +93,15 @@ class Line(object):
         if not isinstance(other, Line):
             return NotImplemented
         return not self == other
+        
+    def getApproximatePoints(self, error=0.001, max_depth=32):
+        return [self.start, self.end]
 
     def point(self, pos):
+        if pos == 0.:
+            return self.start
+        elif pos == 1.:
+            return self.end
         distance = self.end - self.start
         return self.start + distance * pos
 
@@ -93,12 +110,11 @@ class Line(object):
         return sqrt(distance.real ** 2 + distance.imag ** 2)
 
 
-class CubicBezier(object):
+class CubicBezier(Segment):
     def __init__(self, start, control1, control2, end):
-        self.start = start
+        super(CubicBezier, self).__init__(start,end)
         self.control1 = control1
         self.control2 = control2
-        self.end = end
 
     def __repr__(self):
         return 'CubicBezier(start=%s, control1=%s, control2=%s, end=%s)' % (
@@ -125,6 +141,10 @@ class CubicBezier(object):
 
     def point(self, pos):
         """Calculate the x,y position at a certain position of the path"""
+        if pos == 0.:
+            return self.start
+        elif pos == 1.:
+            return self.end
         return ((1 - pos) ** 3 * self.start) + \
                (3 * (1 - pos) ** 2 * pos * self.control1) + \
                (3 * (1 - pos) * pos ** 2 * self.control2) + \
@@ -137,10 +157,9 @@ class CubicBezier(object):
         return segment_length(self, 0, 1, start_point, end_point, error, min_depth, 0)
 
 
-class QuadraticBezier(object):
+class QuadraticBezier(Segment):
     def __init__(self, start, control, end):
-        self.start = start
-        self.end = end
+        super(QuadraticBezier, self).__init__(start,end)
         self.control = control
 
     def __repr__(self):
@@ -167,6 +186,10 @@ class QuadraticBezier(object):
             return self.control == self.start
 
     def point(self, pos):
+        if pos == 0.:
+            return self.start
+        elif pos == 1.:
+            return self.end
         return (1 - pos) ** 2 * self.start + 2 * (1 - pos) * pos * self.control + \
                pos ** 2 * self.end
 
@@ -200,18 +223,17 @@ class QuadraticBezier(object):
                     log((2 * A2 + BA + Sabc) / (BA + C2))) / (4 * A32)
         return s
 
-class Arc(object):
+class Arc(Segment):
 
     def __init__(self, start, radius, rotation, arc, sweep, end):
         """radius is complex, rotation is in degrees,
            large and sweep are 1 or 0 (True/False also work)"""
 
-        self.start = start
+        super(Arc, self).__init__(start,end)
         self.radius = radius
         self.rotation = rotation
         self.arc = bool(arc)
         self.sweep = bool(sweep)
-        self.end = end
 
         self._parameterize()
 
@@ -299,6 +321,10 @@ class Arc(object):
             self.delta -= 360
 
     def point(self, pos):
+        if pos == 0.:
+            return self.start
+        elif pos == 1.:
+            return self.end
         angle = radians(self.theta + (self.delta * pos))
         cosr = cos(radians(self.rotation))
         sinr = sin(radians(self.rotation))
@@ -318,7 +344,17 @@ class Arc(object):
         end_point = self.point(1)
         return segment_length(self, 0, 1, start_point, end_point, error, min_depth, 0)
 
-
+class SVGState(object):
+    def __init__(self, fill=None, fillOpacity=None, fillRule=None, stroke=(0.,0.,0.), strokeOpacity=None):
+        self.fill = fill
+        self.fillOpacity = fillOpacity
+        self.fillRule = fillRule
+        self.stroke = stroke
+        self.strokeOpacity = strokeOpacity
+                
+    def clone(self):
+        return SVGState(fill=self.fill, fillOpacity=self.fillOpacity, fillRule=self.fillRule, stroke=self.stroke, strokeOpacity=self.strokeOpacity)
+        
 class Path(MutableSequence):
     """A Path is a sequence of path segments"""
 
@@ -329,6 +365,7 @@ class Path(MutableSequence):
         self._segments = list(segments)
         self._length = None
         self._lengths = None
+        self.svgState = SVGState()
         if 'closed' in kw:
             self.closed = kw['closed']
 
@@ -462,8 +499,54 @@ class Path(MutableSequence):
             
         return paths
         
-    def getApproximatePoints(self, error=0.001, max_depth=32):
-        return removeCollinear(approximate(self, 0., 1., self.point(0.), self.point(1.), error*.98, 0, max_depth), error*.02)
+    def linearApproximation(self, error=0.001, max_depth=32):
+        closed = False
+        keepSegmentIndex = 0
+        if self.closed:
+            end = self[-1].end
+            for i,segment in enumerate(self):
+                if segment.start == end:
+                    keepSegmentIndex = i
+                    closed = True
+                    break
+        
+        keepSubpathIndex = 0
+        keepPointIndex = 0
+
+        subpaths = []
+        subpath = []
+        prevEnd = None
+        for i,segment in enumerate(self._segments):
+            if prevEnd is None or segment.start == prevEnd:
+                if i == keepSegmentIndex:
+                    keepSubpathIndex = len(subpaths)
+                    keepPointIndex = len(subpath)
+            else:
+                subpaths.append(subpath)
+                subpath = []
+            subpath += segment.getApproximatePoints(error=error/2., max_depth=max_depth)
+            prevEnd = segment.end
+                
+        if len(subpath) > 0:
+            subpaths.append(subpath)
+            
+        linearPath = Path()
+        
+        for i,subpath in enumerate(subpaths):
+            keep = set((keepPointIndex,)) if i == keepSubpathIndex else set() 
+            special = None
+            if i == keepSubpathIndex:
+                special = subpath[keepPointIndex]
+#            points = removeCollinear(subpath, error=error/2., pointsToKeep=keep)
+            points = subpath
+            
+            for j in range(len(points)-1):
+                linearPath.append(Line(points[j], points[j+1]))
+        
+        linearPath.closed = self.closed and linearPath._is_closable()
+        linearPath.svgState = self.svgState
+
+        return linearPath
 
     def getApproximateLines(self, error=0.001, max_depth=32):
         lines = []

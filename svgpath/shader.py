@@ -29,7 +29,6 @@ class Shader(object):
         
     @staticmethod
     def shadePolygon(polygon, angleDegrees, spacing, avoidOutline=True, mode=None):
-    
         if mode is None:
             mode = Shader.MODE_EVEN_ODD
     
