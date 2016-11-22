@@ -301,9 +301,45 @@ def parseSVG(svgTree, tolerance=0.05, shader=None, strokeAll=False):
             
     return commands
     
+def getConfigOpts(filename):
+    opts = []
+    with open(filename) as f:
+        for line in f:
+            l = line.strip()
+            if len(l) and l[0] != '#':
+                entry = l.split('=', 2)
+                opt = entry[0]
+                if len(opt) == 1:
+                    opt = '-' + opt
+                elif opt[0] != '-':
+                    opt = '--' + opt
+                if len(entry) > 1:
+                    arg = entry[1]
+                    if arg[0] in ('"', "'"):
+                        arg = arg[1:-1]
+                else:
+                    arg = None
+                opts.append( (opt,arg) )
+    return opts
+    
 if __name__ == '__main__':
+    tolerance = 0.05
+    doDedup = True    
+    scale = Scale()
+    sendPort = None
+    sendSpeed = 115200
+    hpglLength = 279.4
+    scalingMode = SCALE_FIT
+    shader = Shader()
+    align = [ALIGN_NONE, ALIGN_NONE]
+    plotter = Plotter()
+    hpglOut = False
+    strokeAll = False
+    dpi = (1016., 1016.)
+    
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "LT:M:m:A:XHrf:dna:D:t:s:S:x:y:z:Z:p:f:F:u:", ["allow-repeats", "fit",
+        opts, args = getopt.getopt(sys.argv[1:], "c:LT:M:m:A:XHrf:dna:D:t:s:S:x:y:z:Z:p:f:F:u:", 
+                        ["allow-repeats", "no-allow-repeats", "scale", "config-file=",
                         "area=", 'align-x=', 'align-y=', 
                         'input-dpi=', 'tolerance=', 'send=', 'send-speed=', 'pen-down-z=', 'pen-up-z=', 'parking-z=',
                         'pen-down-speed=', 'pen-up-speed=', 'z-speed=', 'hpgl-out', 'shading-threshold=',
@@ -311,24 +347,14 @@ if __name__ == '__main__':
         if len(args) != 1:
             raise getopt.GetoptError("invalid commandline")
 
-        tolerance = 0.05
-        doDedup = True    
-        scale = Scale()
-        sendPort = None
-        sendSpeed = 115200
-        hpglLength = 279.4
-        scalingMode = SCALE_FIT
-        shader = Shader()
-        align = [ALIGN_NONE, ALIGN_NONE]
-        plotter = Plotter()
-        hpglOut = False
-        strokeAll = False
-        dpi = (1016., 1016.)
-            
-        for opt,arg in opts:
+        i = 0
+        while i < len(opts):
+            opt,arg = opts[i]
             if opt in ('-r', '--allow-repeats'):
                 doDedup = False
-            elif opt in ('-f', '--scale-fit'):
+            elif opt == '--no-allow-repeats':
+                doDedup = True
+            elif opt in ('-f', '--scale'):
                 if arg.startswith('n'):
                     scalingMode = SCALE_NONE
                 elif arg.startswith('d'):
@@ -385,6 +411,8 @@ if __name__ == '__main__':
                 plotter.drawSpeed = float(arg)
             elif opt in ('-H', '--hpgl-out'):
                 hpglOut = True
+            elif opt == '--no-hpgl-out':
+                hpglOut = False
             elif opt in ('-T', '--shading-threshold'):
                 shader.unshadedThreshold = float(arg)
             elif opt in ('-m', '--shading-lightest'):
@@ -395,14 +423,24 @@ if __name__ == '__main__':
                 shader.angle = float(arg)
             elif opt in ('-X', '--shading-crosshatch'):
                 shader.crossHatch = True
+            elif opt == '--no-shading-crosshatch':
+                shader.crossHatch = False
             elif opt in ('-L', '--stroke-all'):
                 strokeAll = True
+            elif opt == '--no-stroke-all':
+                strokeAll = False
+            elif opt in ('-c', '--config-file'):
+                configOpts = getConfigOpts(arg)
+                opts = opts[:i+1] + configOpts + opts[i+1:]
+            else:
+                raise ValueError("Unrecognized argument "+opt)
+            i += 1
         
     except getopt.GetoptError:
         sys.stderr.write("gcodeplot.py [options] inputfile [> output.gcode]\n")
         sys.stderr.write("""
  -h|--help: this
- -r|--allow-repeats: do not deduplicate paths [default: off]
+ -r|--allow-repeats*: do not deduplicate paths
  -f|--scale=mode: scaling option: none(n), fit(f), down-only(d)
  -D|--input-dpi=xdpi[,ydpi]: hpgl dpi
  -t|--tolerance=x: ignore (some) deviations of x millimeters or less [default 0.05]
@@ -418,14 +456,17 @@ if __name__ == '__main__':
  -z|--pen-down-z=z: z-position for pen-down (millimeters)
  -Z|--pen-up-speed=z: speed for moving with pen up (millimeters/second)
  -z|--pen-down-speed=z: speed for moving with pen down (millimeters/second)
- -u|--z-speed: speed for up/down movement (millimeters/second)
- -H|--hpgl-out: output is HPGL, not gcode; most options ignored [default: off]
+ -u|--z-speed=s: speed for up/down movement (millimeters/second)
+ -H|--hpgl-out*: output is HPGL, not gcode; most options ignored [default: off]
  -T|--shading-threshold=n: darkest grayscale to leave unshaded (decimal, 0. to 1.; set to 0 to turn off SVG shading) [default 1.0]
  -m|--shading-lightest=x: shading spacing for lightest colors (millimeters) [default 3.0]
  -M|--shading-darkest=x: shading spacing for darkest color (millimeters) [default 0.5]
  -A|--shading-angle=x: shading angle (degrees) [default 45]
- -X|--shading-crosshatch: cross hatch shading [default: off]
- -L|--stroke-all: stroke even regions specified by SVG to have no stroke [default: off]
+ -X|--shading-crosshatch*: cross hatch shading
+ -L|--stroke-all*: stroke even regions specified by SVG to have no stroke
+ -c|--config-file=filename: read arguments, one per line, from filename
+ 
+ The options with an asterisk are default off and can be turned off again by adding "no-" at the beginning to the long-form option, e.g., --no-stroke-all.
 """)
         sys.exit(2)
 
