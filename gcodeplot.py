@@ -210,7 +210,7 @@ def emitGcode(commands, scale = Scale(), plotter=Plotter(), scalingMode=SCALE_NO
                 penDown()
             else:
                 penUp()
-            gcode.append('G1 F%.1f X%.3f Y%.3f' % (speed*60., p[0], p[1]))
+            gcode.append('G1 F%.1f X%.3f Y%.3f; draw' % (speed*60., p[0], p[1]))
             state.curXY = p
             state.time += d / speed
 

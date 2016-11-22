@@ -1,4 +1,4 @@
-Convert svg (in progress) and HPGL to gcode for a 3-axis GCode machine, where the Z-axis controls
-the pen height.
+Convert SVG (only paths, and ignores transforms) and HPGL to gcode for a 3-axis GCode machine, 
+where the Z-axis controls the pen height.
 
-Use Python 2.7.
+You can also convert the same SVG subset to HPGL.
