@@ -382,24 +382,35 @@ def rgbFromColor(colorName):
 def getPathsFromSVG(svg,yGrowsUp=True):
     paths = []
     
+    def updateStateCommand(state,cmd,arg):
+        if cmd == 'fill':
+            state.fill = rgbFromColor(arg)
+        elif cmd == 'fill-opacity':
+            state.fillOpacity = float(arg)
+        elif cmd == 'fill-rule':
+            state.fillRule = arg
+            if state.fill is None:
+                state.fill = (0.,0.,0.)
+        elif cmd == 'stroke':
+            state.stroke = rgbFromColor(arg)
+        elif cmd == 'stroke-opacity':
+            state.strokeOpacity = rgbFromColor(arg)
+    
     def updateState(tree,state):
         state = state.clone()
         try:
             style = re.sub(r'\s',r'', tree.attrib['style']).lower()
             for item in style.split(';'):
                 cmd,arg = item.split(':')[:2]
-                if cmd == 'fill':
-                    state.fill = rgbFromColor(arg)
-                elif cmd == 'fill-opacity':
-                    state.fillOpacity = float(arg)
-                elif cmd == 'fill-rule':
-                    state.fillRule = arg
-                elif cmd == 'stroke':
-                    state.stroke = rgbFromColor(arg)
-                elif cmd == 'stroke-opacity':
-                    state.strokeOpacity = rgbFromColor(arg)
+                updateStateCommand(state,cmd,arg)
         except:
             pass
+            
+        for item in tree.attrib:
+            try:
+                updateStateCommand(state,item,tree.attrib[item])
+            except:
+                pass
             
         return state
 
@@ -408,7 +419,7 @@ def getPathsFromSVG(svg,yGrowsUp=True):
         state = updateState(tree, state)
         if tag == 'path':
             path = parse_path(tree.attrib['d'], scaler=scaler)
-            path.svgState = state
+            path.svgState = updateState(tree, state)
             paths.append(path)
         else:
             for child in tree:
