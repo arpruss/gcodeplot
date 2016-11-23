@@ -37,36 +37,40 @@ def linearTemperature(u):
     return 1 - u
     
 def exponentialTemperature(u):
-    return (math.exp(-u*3) - math.exp(-3))/(1-math.exp(-3))
+    return .006 ** u
     
-def neighborConsecutive(lines, T):
+def neighborSwapping(lines, T):
+    n = len(lines)
+    n1,n2,n3,n4 = sorted(random.sample(xrange(n+1), 4))
+    # swap [n1:n2] for [n3:n4]
+    return lines[:n1] + lines[n3:n4] + lines[n2:n3] + lines[n1:n2] + lines[n4:]
+    
+def neighborReversing(lines, T):
     newLines = [line.copy() for line in lines]
     n = len(lines)
-    if random.randint(0,10) == 0:
-        newLines[random.randint(0,n-1)].reverse()
-        return newLines
-    first = random.randint(0,n-1)
-    second = (first + random.randint(1,n/4)) % n
-    newLines[first],newLines[second] = newLines[second],newLines[first]
+    
+    i = random.randint(0,n-1)
+    j = random.randint(0,n-2)
+    if j >= i:
+        j += 1
+    
+    i,j = min(i,j),max(i,j)
+    
+    while i<j:
+        newLines[i].reverse()
+        newLines[j].reverse()
+        newLines[i],newLines[j] = newLines[j],newLines[i]
+        i += 1
+        j -= 1
+    
     return newLines
     
-def neighborSpread(lines, T): # steps: lines*(lines-1)
-    newLines = [line.copy() for line in lines]
-    n = len(lines)
-    r = random.randint(0,10*n+n*(n-1)-1)
-    if r < 10*n:
-        newLines[r % n].reverse()
-        return newLines
-    r -= 10*n
-    first = int(math.floor(r / (n-1)))
-    second = int(math.floor(r % (n-1)))
-    if second >= first:
-        second += 1
-    newLines[first],newLines[second] = newLines[second],newLines[first]
-    return newLines
-
-def optimize(lines, k, maxSteps, neighbor=neighborSpread, temperature=linearTemperature):
+def neighbor(lines, T):
+    return neighborSwapping(lines,T) if random.random()<0.25*T else neighborReversing(lines,T)
+    
+def optimize(lines, k, maxSteps, neighbor=neighborReversing, temperature=linearTemperature):
     E = energy(lines)
+    E0 = E
     
     print "original", E
 
@@ -78,7 +82,7 @@ def optimize(lines, k, maxSteps, neighbor=neighborSpread, temperature=linearTemp
         newLines = neighbor(lines,T)
         newE = energy(newLines)
         try:
-            if math.exp(-(newE-E)/(k*T)) >= random.random():
+            if math.exp(-(newE-E)/(E0*k*T)) >= random.random():
                 lines = newLines
                 E = newE
                 if E < bestE:
@@ -99,10 +103,11 @@ if __name__ == '__main__':
     lines = []
     random.seed(1)
     
-    n = 200
+    n = 100
     
     for i in range(n):
         lines.append(DrawingSegment([(random.random(),random.random()),(random.random(),random.random())]))
 
-    optimize(lines, 0.1, int(3*n*math.log(n)), neighbor=neighborSpread, temperature=linearTemperature)
-    
+    steps = 100*n #int(20*n*math.log(n))
+    print steps
+    optimize(lines, 0.001, steps, neighbor=neighbor, temperature=exponentialTemperature)
