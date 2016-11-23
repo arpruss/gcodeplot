@@ -27,8 +27,11 @@ class DrawingSegment(object):
     def copy(self):
         return DrawingSegment(self.points, reversed=self.reversed)        
 
+    def reversedCopy(self):
+        return DrawingSegment(self.points, reversed=not self.reversed)        
+
 def distance(z1,z2):
-    return math.sqrt((z1[0]-z2[0])**2 + (z1[1]-z2[1])**2)
+    return math.hypot(z1[0]-z2[0], z1[1]-z2[1])
         
 def energy(lines):
     return sum(distance(lines[i].end(), lines[i+1].start()) for i in range(len(lines)-1))
@@ -39,34 +42,40 @@ def linearTemperature(u):
 def exponentialTemperature(u):
     return .006 ** u
     
-def neighborSwapping(lines, T):
+def neighborSwapping(lines, T, E):
     n = len(lines)
     n1,n2,n3,n4 = sorted(random.sample(xrange(n+1), 4))
     # swap [n1:n2] for [n3:n4]
-    return lines[:n1] + lines[n3:n4] + lines[n2:n3] + lines[n1:n2] + lines[n4:]
+    newLines = lines[:n1] + lines[n3:n4] + lines[n2:n3] + lines[n1:n2] + lines[n4:]
+    return newLines, energy(newLines)
     
-def neighborReversing(lines, T):
-    newLines = [line.copy() for line in lines]
+def neighborReversing(lines, T, E):
     n = len(lines)
     
-    i = random.randint(0,n-1)
-    j = random.randint(0,n-2)
-    if j >= i:
-        j += 1
+    i = random.randint(0,n-2)
+    if i == 0:
+        j = random.randint(1,n-2)
+    else:
+        j = random.randint(i+1,n-1)
+
+    newLines = lines[:i]
     
-    i,j = min(i,j),max(i,j)
+    for ii in range(i,j+1):
+        newLines.append(lines[j+i-ii].reversedCopy())
     
-    while i<j:
-        newLines[i].reverse()
-        newLines[j].reverse()
-        newLines[i],newLines[j] = newLines[j],newLines[i]
-        i += 1
-        j -= 1
+    newLines += lines[j+1:]    
+
+    if j < n-1:
+        deltaE = distance(newLines[j].end(),newLines[j+1].start()) - distance(lines[j].end(),lines[j+1].start())
+    else:
+        deltaE = 0
+    if 0 < i:
+        deltaE += distance(newLines[i-1].end(),newLines[i].start()) - distance(lines[i-1].end(),lines[i].start())
+
+    return newLines, E+deltaE # energy(newLines)
     
-    return newLines
-    
-def neighbor(lines, T):
-    return neighborSwapping(lines,T) if random.random()<0.25*T else neighborReversing(lines,T)
+def neighbor(lines, T, E):
+    return neighborSwapping(lines,T,E) if random.random()<0 else neighborReversing(lines,T,E)
     
 def optimize(lines, k, maxSteps, neighbor=neighborReversing, temperature=linearTemperature):
     E = energy(lines)
@@ -79,8 +88,7 @@ def optimize(lines, k, maxSteps, neighbor=neighborReversing, temperature=linearT
     
     for step in range(maxSteps):
         T = temperature(step/float(maxSteps))
-        newLines = neighbor(lines,T)
-        newE = energy(newLines)
+        newLines,newE = neighbor(lines,T,E)
         try:
             if math.exp(-(newE-E)/(E0*k*T)) >= random.random():
                 lines = newLines
@@ -91,8 +99,6 @@ def optimize(lines, k, maxSteps, neighbor=neighborReversing, temperature=linearT
         except:
             # overflow
             break
-#        if step > maxSteps / 2:
-#            break
             
     print "final", E
     print "best", bestE
@@ -103,11 +109,11 @@ if __name__ == '__main__':
     lines = []
     random.seed(1)
     
-    n = 100
+    n = 1000
     
     for i in range(n):
         lines.append(DrawingSegment([(random.random(),random.random()),(random.random(),random.random())]))
 
     steps = 100*n #int(20*n*math.log(n))
     print steps
-    optimize(lines, 0.001, steps, neighbor=neighbor, temperature=exponentialTemperature)
+    optimize(lines, 0.001, steps, neighbor=neighborReversing, temperature=exponentialTemperature)
