@@ -139,4 +139,4 @@ if __name__ == '__main__':
         lines.append([(random.random(),random.random()),(random.random(),random.random())])
 
     steps = 250*n #int(20*n*math.log(n))
-    optimize(lines, steps, k=0.0001, temperature=exponentialTemperature, timeout=15, retries=2)
+    optimize(lines, maxSteps=steps, k=0.0001, temperature=exponentialTemperature, timeout=15, retries=2)
