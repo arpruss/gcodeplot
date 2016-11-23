@@ -22,19 +22,26 @@ def linearTemperature(u):
 def exponentialTemperature(u):
     return .006 ** u
     
-def optimize(lines, maxSteps, k=0.001, temperature=exponentialTemperature, timeout=30, retries=2, quiet=False):
+def optimize(lines, maxSteps=None, k=0.0001, temperature=exponentialTemperature, timeout=30, retries=2, quiet=False):
     t00 = time.time()
 
     if not quiet: 
         sys.stderr.write("Optimizing...")
         sys.stderr.flush()
         lastMessagePercent = -100
-        
+
     N = len(lines)
+
+    if maxSteps == None:
+        maxSteps = 250*N
+        
     reversals = [False for i in range(N)]
 
     E = energy(lines, reversals)
     E0 = E
+    
+    if E == 0:
+        return lines
     
     def P(deltaE,T):
         try:
@@ -54,8 +61,8 @@ def optimize(lines, maxSteps, k=0.001, temperature=exponentialTemperature, timeo
         while step < maxSteps:
             T = temperature(step/float(maxSteps))
             
-            i = random.randint(0,n-1)
-            j = random.randint(i,n-1)
+            i = random.randint(0,N-1)
+            j = random.randint(i,N-1)
             # useless if i==j, but that occurs rarely enough that it's not worth optimizing for
 
             oldE = measure(lines,reversals,j) + measure(lines,reversals,i-1)
@@ -126,10 +133,10 @@ if __name__ == '__main__':
     lines = []
     random.seed(1)
     
-    n = 1000
+    n = 2000
     
     for i in range(n):
         lines.append([(random.random(),random.random()),(random.random(),random.random())])
 
     steps = 250*n #int(20*n*math.log(n))
-    optimize(lines, steps, k=0.001, temperature=exponentialTemperature, timeout=15, retries=2)
+    optimize(lines, steps, k=0.0001, temperature=exponentialTemperature, timeout=15, retries=2)

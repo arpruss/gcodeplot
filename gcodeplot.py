@@ -4,6 +4,7 @@ import sys
 import getopt
 import math
 import xml.etree.ElementTree as ET
+import utils.anneal as anneal
 from svgpath.parser import getPathsFromSVG 
 from svgpath.shader import Shader
 
@@ -17,17 +18,6 @@ ALIGN_LEFT = ALIGN_BOTTOM
 ALIGN_RIGHT = ALIGN_TOP
 ALIGN_CENTER = 3
 
-class Command(object):
-    INIT = 0
-    MOVE_PEN_UP = 1
-    MOVE_PEN_DOWN = 2
-    def __init__(self, command, point=None):
-        self.command = command
-        self.point = point
-        
-    def __repr__(self):
-        return '('+str(self.command)+','+str(self.point)+')'
-        
 class Plotter(object):
     def __init__(self, xyMin=(10,8), xyMax=(192,150), 
             drawSpeed=35, moveSpeed=40, zSpeed=5, penDownZ = 13.5, penUpZ = 18, safeUpZ = 40):
@@ -86,73 +76,68 @@ class Scale(object):
     def scalePoint(self, point):
         return (point[0]*self.scale[0]+self.offset[0], point[1]*self.scale[1]+self.offset[1])
 
-def dedup(commands):
-    newCommands = []
+def removePenBob(segments):
+    """
+    Merge segments with same beginning and end
+    """
+
+    outSegments = []
+    outSegment = []
+    
+    for segment in segments:
+        if not outSegment:
+            outSegment = list(segment)
+        elif outSegment[-1] == segment[0]:
+            outSegment += segment[1:]
+        else:
+            outSegments.append(outSegment)
+            outSegment = list(segment)
+            
+    if outSegment:
+        outSegments.append(outSegment)
+        
+    return outSegments
+        
+def dedup(segments):
     curPoint = None
     draws = set()
-    
-    dups = 0
-    cons = 0
     
     def d2(a,b):
         return (a[0]-b[0])**2+(a[1]-b[1])**2
     
-    for c in commands:
-        if c.command == Command.MOVE_PEN_DOWN and curPoint is not None:
-            draw = (curPoint, c.point)
-            if draw in draws or (c.point, curPoint) in draws:
-                dups += 1
-                c = Command(Command.MOVE_PEN_UP, point=c.point) 
-            else:
-                draws.add(draw)
-
-        if (c.command == Command.MOVE_PEN_UP and len(newCommands) > 0 and 
-                newCommands[-1].command == Command.MOVE_PEN_UP):
-            cons += 1
-            newCommands[-1] = c
-        else:
-            newCommands.append(c)
-            
-        if c.point is not None and (c.command == Command.MOVE_PEN_DOWN or c.command == Command.MOVE_PEN_UP):
-            curPoint = c.point
-
-    return newCommands
+    newSegments = []
+    newSegment = []
     
-def removePenBob(commands):
-    """
-    Remove commands that move the pen up and then back down.
-    """
-    newCommands = []
-    penDown = False
-    i = 0
-    while i < len(commands):
-        if ( penDown and commands[i].command == Command.MOVE_PEN_UP and 
-                i+1 < len(commands) and commands[i+1].command == Command.MOVE_PEN_DOWN and
-                commands[i].point == commands[i+1].point ):
-            i += 1 
-        elif commands[i].command == Command.MOVE_PEN_UP:
-            penDown = False
-            newCommands.append(commands[i])
-        elif commands[i].command == Command.MOVE_PEN_DOWN:
-            penUp = True
-            newCommands.append(commands[i])
-        i += 1
-    return newCommands
-        
-def emitGcode(commands, scale = Scale(), plotter=Plotter(), scalingMode=SCALE_NONE, align = None, tolerance = 0):
+    for segment in segments:
+        newSegment = [segment[0]]
+        for i in range(1,len(segment)):
+            draw = (segment[i-1], segment[i])
+            if draw in draws or (segment[i], segment[i-1]) in draws:
+                if len(newSegment)>1:
+                    newSegments.append(newSegment)
+                newSegment = [segment[i]]
+            else:        
+                draws.add(draw)
+                newSegment.append(segment[i])
+        if newSegment:
+            newSegments.append(newSegment)
+
+    return removePenBob(newSegments)
+    
+def emitGcode(segments, scale = Scale(), plotter=Plotter(), scalingMode=SCALE_NONE, align = None, tolerance = 0):
 
     xyMin = [float("inf"),float("inf")]
     xyMax = [float("-inf"),float("-inf")]
     
     allFit = True
     
-    for c in commands:
-        if c.point is not None:
-            if not plotter.inRange(scale.scalePoint(c.point)):
+    for segment in segments:
+        for point in segment:
+            if not plotter.inRange(scale.scalePoint(point)):
                 allFit = False
             for i in range(2):
-                xyMin[i] = min(xyMin[i], c.point[i])
-                xyMax[i] = max(xyMax[i], c.point[i])
+                xyMin[i] = min(xyMin[i], point[i])
+                xyMax[i] = max(xyMax[i], point[i])
     
     if scalingMode == SCALE_NONE:
         if not allFit:
@@ -214,11 +199,10 @@ def emitGcode(commands, scale = Scale(), plotter=Plotter(), scalingMode=SCALE_NO
             state.curXY = p
             state.time += d / speed
 
-    for c in commands:
-        if c.command == Command.MOVE_PEN_UP:
-            penMove(False, plotter.moveSpeed, scale.scalePoint(c.point))
-        elif c.command == Command.MOVE_PEN_DOWN:
-            penMove(True, plotter.drawSpeed, scale.scalePoint(c.point))
+    for segment in segments:
+        penMove(False, plotter.moveSpeed, scale.scalePoint(segment[0]))
+        for i in range(1,len(segment)):
+            penMove(True, plotter.drawSpeed, scale.scalePoint(segment[i]))
 
     penUp()
     
@@ -228,55 +212,62 @@ def emitGcode(commands, scale = Scale(), plotter=Plotter(), scalingMode=SCALE_NO
     
 def parseHPGL(data,dpi=(1016.,1016.)):
     try:
-        scale = (254./dpi[0], 254./dpi[1])
+        scale = (25.4/dpi[0], 25.4/dpi[1])
     except:
-        scale = (254./dpi, 254./dpi)
+        scale = (25.4/dpi, 25.4/dpi)
 
-    commands = []
+    segments = []
+    segment = []
+    
+    sys.stderr.write(str(scale)+"\n")
+
     for cmd in re.sub(r'\s',r'',data).split(';'):
         if cmd.startswith('PD'):
             try:
                 coords = map(float, cmd[2:].split(','))
                 for i in range(0,len(coords),2):
-                    commands.append(Command(Command.MOVE_PEN_DOWN, point=(coords[i]*scale[0], coords[i+1]*scale[1])))
+                    segment.append((coords[i]*scale[0], coords[i+1]*scale[1]))
             except:
-                pass 
+                pass
                 # ignore no-movement PD/PU
         elif cmd.startswith('PU'):
             try:
                 coords = map(float, cmd[2:].split(','))
-                for i in range(0,len(coords),2):
-                    commands.append(Command(Command.MOVE_PEN_UP, point=(coords[i]*scale[0], pageLength-coords[i+1]*scale[1])))
+                segments.append(segment)
+                segment = [(coords[-2]*scale[0], coords[-1]*scale[1])]
             except:
                 pass 
                 # ignore no-movement PD/PU
         elif cmd.startswith('IN'):
-            commands.append(Command(Command.INIT))
+            pass
         elif len(cmd) > 0:
             sys.stderr.write('Unknown command '+cmd[:2]+'\n')
-    return removePenBob(commands)
+            
+    if segment:
+        segments.append(segment)
+        
+    return segments
     
-def hpglCoordinates(point):
-    x = point[0] * 1016. / 25.4
-    y = point[1] * 1016. / 25.4
-    return str(int(round(x)))+','+str(int(round(y)))
+def emitHPGL(segments):
 
-def emitHPGL(commands):
+    def hpglCoordinates(point):
+        x = point[0] * 1016. / 25.4
+        y = point[1] * 1016. / 25.4
+        return str(int(round(x)))+','+str(int(round(y)))
+
     hpgl = []
     hpgl.append('IN')
-    for c in commands:
-        if c.command == Command.MOVE_PEN_UP:
-            hpgl.append('PU'+hpglCoordinates(c.point)) 
-        elif c.command == Command.MOVE_PEN_DOWN:
-            hpgl.append('PD'+hpglCoordinates(c.point)) 
-        else:
-            continue
+    for segment in segments:
+        hpgl.append('PU'+hpglCoordinates(segment[0]))
+        for i in range(1,len(segment)):
+            hpgl.append('PD'+hpglCoordinates(segment[i]))
+            # TODO: combine PD commands
     hpgl.append('PU')
     hpgl.append('')
     return ';'.join(hpgl)
 
 def parseSVG(svgTree, tolerance=0.05, shader=None, strokeAll=False):
-    commands = []
+    segments = []
     for path in getPathsFromSVG(svgTree)[0]:
         lines = []
         
@@ -284,8 +275,7 @@ def parseSVG(svgTree, tolerance=0.05, shader=None, strokeAll=False):
         
         for line in path.linearApproximation(error=tolerance):
             if stroke:
-                commands.append(Command(Command.MOVE_PEN_UP, point=(line.start.real,line.start.imag)))
-                commands.append(Command(Command.MOVE_PEN_DOWN, point=(line.end.real,line.end.imag)))
+                segments.append([(line.start.real,line.start.imag),(line.end.real,line.end.imag)])
             lines.append((line.start, line.end))
 
         if shader is not None and shader.isActive() and path.svgState.fill is not None:
@@ -295,10 +285,9 @@ def parseSVG(svgTree, tolerance=0.05, shader=None, strokeAll=False):
                 grayscale *= path.svgState.fillOpacity # TODO: real alpha!
             fillLines = shader.shade(lines, grayscale, avoidOutline=(path.svgState.stroke is None), mode=mode)
             for line in fillLines:
-                commands.append(Command(Command.MOVE_PEN_UP, point=(line[0].real,line[0].imag)))
-                commands.append(Command(Command.MOVE_PEN_DOWN, point=(line[1].real,line[1].imag)))
-            
-    return removePenBob(commands)
+                segments.append([(line[0].real,line[0].imag),(line[1].real,line[1].imag)])
+ 
+    return segments
     
 def getConfigOpts(filename):
     opts = []
@@ -334,12 +323,13 @@ if __name__ == '__main__':
     plotter = Plotter()
     hpglOut = False
     strokeAll = False
+    optimizationTimeOut = 30
     dpi = (1016., 1016.)
     
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "Oc:LT:M:m:A:XHrf:dna:D:t:s:S:x:y:z:Z:p:f:F:u:", 
+        opts, args = getopt.getopt(sys.argv[1:], "o:Oc:LT:M:m:A:XHrf:dna:D:t:s:S:x:y:z:Z:p:f:F:u:", 
                         ["allow-repeats", "no-allow-repeats", "scale=", "config-file=",
-                        "area=", 'align-x=', 'align-y=', 
+                        "area=", 'align-x=', 'align-y=', 'optimize-timeout=', 
                         'input-dpi=', 'tolerance=', 'send=', 'send-speed=', 'pen-down-z=', 'pen-up-z=', 'parking-z=',
                         'pen-down-speed=', 'pen-up-speed=', 'z-speed=', 'hpgl-out', 'no-hpgl-out', 'shading-threshold=',
                         'shading-angle=', 'shading-crosshatch', 'no-shading-crosshatch', 'shading-avoid-outline', 
@@ -436,6 +426,8 @@ if __name__ == '__main__':
             elif opt in ('-c', '--config-file'):
                 configOpts = getConfigOpts(arg)
                 opts = opts[:i+1] + configOpts + opts[i+1:]
+            elif opt in ('-o', '--optimization-timeout'):
+                optimizationTimeOut = float(arg)
             else:
                 raise ValueError("Unrecognized argument "+opt)
             i += 1
@@ -469,6 +461,7 @@ if __name__ == '__main__':
  -X|--shading-crosshatch*: cross hatch shading
  -L|--stroke-all*: stroke even regions specified by SVG to have no stroke
  -O|--shading-avoid-outline*: avoid going over outline twice when shading
+ -o|--optimimze-timeout=t: timeout on optimization attempt (seconds; will be retried once; set to 0 to turn off optimization) [default 30]
  -c|--config-file=filename: read arguments, one per line, from filename
  
  The options with an asterisk are default off and can be turned off again by adding "no-" at the beginning to the long-form option, e.g., --no-stroke-all.
@@ -492,20 +485,25 @@ if __name__ == '__main__':
         exit(1)
         
     if svgTree is not None:
-        commands = parseSVG(svgTree, tolerance=tolerance, shader=shader, strokeAll=strokeAll)
+        segments = parseSVG(svgTree, tolerance=tolerance, shader=shader, strokeAll=strokeAll)
     else:
-        commands = parseHPGL(data, dpi=dpi)
+        segments = parseHPGL(data, dpi=dpi)
+    segments = removePenBob(segments)
 
     if doDedup:
-        commands = dedup(commands)
+        segments = dedup(segments)
+
+    if optimizationTimeOut > 0.:
+        segments = removePenBob(anneal.optimize(segments, timeout=optimizationTimeOut))
 
     if hpglOut:
-        g = emitHPGL(commands)
+        g = emitHPGL(segments)
     else:    
-        g = emitGcode(commands, scale=scale, align=align, scalingMode=scalingMode, tolerance=tolerance, plotter=plotter)
+        g = emitGcode(segments, scale=scale, align=align, scalingMode=scalingMode, tolerance=tolerance, plotter=plotter)
+
     if g:
         if sendPort is not None:
-            import sendgcode
+            import utils.sendgcode as sendgcode
             if hpglOut:
                 sendgcode.sendHPGL(port=sendPort, speed=115200, commands=g)
             else:
