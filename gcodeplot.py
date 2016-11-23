@@ -76,11 +76,12 @@ class Scale(object):
     def scalePoint(self, point):
         return (point[0]*self.scale[0]+self.offset[0], point[1]*self.scale[1]+self.offset[1])
 
-def removePenBob(segments):
+def removePenBob(data):
     """
     Merge segments with same beginning and end
     """
 
+    outData = []
     outSegments = []
     outSegment = []
     
@@ -124,13 +125,12 @@ def dedup(segments):
 
     return removePenBob(newSegments)
     
-def emitGcode(segments, scale = Scale(), plotter=Plotter(), scalingMode=SCALE_NONE, align = None, tolerance = 0):
-
+def emitGcode(segments, scale = Scale(), plotter=Plotter(), scalingMode=SCALE_NONE, align = None, tolerance = 0, gcodePause="@pause"):
     xyMin = [float("inf"),float("inf")]
     xyMax = [float("-inf"),float("-inf")]
     
     allFit = True
-    
+
     for segment in segments:
         for point in segment:
             if not plotter.inRange(scale.scalePoint(point)):
@@ -323,17 +323,18 @@ if __name__ == '__main__':
     plotter = Plotter()
     hpglOut = False
     strokeAll = False
+    gcodePause = "@pause"
     optimizationTimeOut = 30
     dpi = (1016., 1016.)
     
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "o:Oc:LT:M:m:A:XHrf:dna:D:t:s:S:x:y:z:Z:p:f:F:u:", 
+        opts, args = getopt.getopt(sys.argv[1:], "P:o:Oc:LT:M:m:A:XHrf:dna:D:t:s:S:x:y:z:Z:p:f:F:u:", 
                         ["allow-repeats", "no-allow-repeats", "scale=", "config-file=",
                         "area=", 'align-x=', 'align-y=', 'optimize-timeout=', 
                         'input-dpi=', 'tolerance=', 'send=', 'send-speed=', 'pen-down-z=', 'pen-up-z=', 'parking-z=',
                         'pen-down-speed=', 'pen-up-speed=', 'z-speed=', 'hpgl-out', 'no-hpgl-out', 'shading-threshold=',
                         'shading-angle=', 'shading-crosshatch', 'no-shading-crosshatch', 'shading-avoid-outline', 
-                        'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all'], )
+                        'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all', 'gcode-pause'], )
         if len(args) != 1:
             raise getopt.GetoptError("invalid commandline")
 
@@ -344,6 +345,8 @@ if __name__ == '__main__':
                 doDedup = False
             elif opt == '--no-allow-repeats':
                 doDedup = True
+            elif opt in ('-P', '--gcode-pause'):
+                gcodePause = arg
             elif opt in ('-f', '--scale'):
                 if arg.startswith('n'):
                     scalingMode = SCALE_NONE
@@ -463,6 +466,8 @@ if __name__ == '__main__':
  -O|--shading-avoid-outline*: avoid going over outline twice when shading
  -o|--optimimze-timeout=t: timeout on optimization attempt (seconds; will be retried once; set to 0 to turn off optimization) [default 30]
  -c|--config-file=filename: read arguments, one per line, from filename
+ TODO -w|--gcode-pause=cmd: gcode pause command [default: @pause]
+ TODO -P|--pens=penfile: read output pens from penfile
  
  The options with an asterisk are default off and can be turned off again by adding "no-" at the beginning to the long-form option, e.g., --no-stroke-all.
 """)
@@ -499,7 +504,7 @@ if __name__ == '__main__':
     if hpglOut:
         g = emitHPGL(segments)
     else:    
-        g = emitGcode(segments, scale=scale, align=align, scalingMode=scalingMode, tolerance=tolerance, plotter=plotter)
+        g = emitGcode(segments, scale=scale, align=align, scalingMode=scalingMode, tolerance=tolerance, plotter=plotter, gcodePause=gcodePause)
 
     if g:
         if sendPort is not None:
@@ -516,5 +521,4 @@ if __name__ == '__main__':
     else:
         sys.stderr.write("No points.")
         sys.exit(1)
-
        
