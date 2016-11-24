@@ -1,8 +1,8 @@
 import serial
 import time
-import threading
 import os
 import re
+import sys
 
 def sendHPGL(port, commands):
     s = serial.Serial(port, 115200)
@@ -10,7 +10,7 @@ def sendHPGL(port, commands):
     s.write(commands)
     s.close()
 
-def sendGcode(port, commands, speed=115200, quiet = False):    
+def sendGcode(port, commands, speed=115200, quiet = False, gcodePause="@pause"):    
     class State(object):
         pass
         
@@ -34,6 +34,7 @@ def sendGcode(port, commands, speed=115200, quiet = False):
     
     s = serial.Serial(port, 115200)
     s.flushInput()
+#    s = open(port, 'w')
     
     lineNumber = 1
     s.write('\nM110 N1\n')
@@ -41,17 +42,18 @@ def sendGcode(port, commands, speed=115200, quiet = False):
 ## TODO: flow control    
     lineNumber = 2
     for c in commands:
-        c = re.sub(r'\s*\;.*',r'', c.strip())
+        c = c.strip()
+        if c.startswith(gcodePause):
+            sys.stderr.write("PAUSE:"+c[len(gcodePause):]+". ENTER to resume\n")
+            sys.stderr.flush()
+            raw_input()
+        c = re.sub(r'\s*\;.*',r'', c)
         if len(c):
             command = 'N' + str(lineNumber) + ' ' + c
             command += '*' + str(checksum(command))
             s.write(command+'\n')
-            print(command)
-    #        sys.stderr.write(command+'\n')
-    #        n = s.inWaiting()
             s.flushInput()
             lineNumber += 1
-#        sys.stderr.write(s.read(n))
     """
         time.sleep(0.1)
         if state.cmd is not None:
