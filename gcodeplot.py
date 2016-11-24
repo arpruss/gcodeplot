@@ -211,30 +211,38 @@ def emitGcode(data, pens = {}, scale = Scale(), plotter=Plotter(), scalingMode=S
         return math.hypot(a[0]-b[0],a[1]-b[1])
     
     def penUp():
-        if state.curZ < plotter.penUpZ:
+        if state.curZ is None or state.curZ < plotter.penUpZ:
             gcode.append('G0 F%.1f Z%.3f; pen up' % (plotter.zSpeed*60., plotter.penUpZ))
-            state.time += abs(plotter.penUpZ-state.curZ) / plotter.zSpeed
+            if state.curZ is not None:
+                state.time += abs(plotter.penUpZ-state.curZ) / plotter.zSpeed
             state.curZ = plotter.penUpZ
         
     def penDown():
-        if state.curZ != plotter.penDownZ:
+        if state.curZ is None or state.curZ != plotter.penDownZ:
             gcode.append('G0 F%.1f Z%.3f; pen down' % (plotter.zSpeed*60., plotter.penDownZ))
             state.time += abs(state.curZ-plotter.penDownZ) / plotter.zSpeed
             state.curZ = plotter.penDownZ
 
     def penMove(down, speed, p):
-        d = distance(state.curXY, p)
+        if state.curXY is None:
+            d = float("inf")
+        else:
+            d = distance(state.curXY, p)
         if d > tolerance:
-            if (down):
+            if down:
                 penDown()
             else:
                 penUp()
             gcode.append('G1 F%.1f X%.3f Y%.3f; %s' % (speed*60., p[0], p[1], "draw" if down else "move"))
+            if state.curXY is not None:
+                state.time += d / speed
             state.curXY = p
-            state.time += d / speed
 
     for pen in data:
         gcode.append( ((gcodePause+' load pen: ') if pen is not 1 else '; use pen ')+describePen(pens,pen))
+        if pen is not 1:
+            state.curZ = None
+            state.curXY = None
 
         for segment in data[pen]:
             penMove(False, plotter.moveSpeed, scale.scalePoint(segment[0]))
