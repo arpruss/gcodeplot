@@ -59,6 +59,9 @@ class Shader(object):
 
         y = minY + ( - minY ) % spacing + deltaY    
         
+        if y > minY + spacing:
+            y -= spacing
+        
         odd = False
 
         all = []

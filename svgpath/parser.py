@@ -4,6 +4,7 @@ import re
 from . import path
 import xml.etree.ElementTree as ET
 import re
+import math
 
 COMMANDS = set('MmZzLlHhVvCcSsQqTtAa')
 UPPERCASE = set('MZLHVCSQTA')
@@ -168,8 +169,28 @@ def _tokenize_path(pathdef):
         for token in FLOAT_RE.findall(x):
             yield token
 
+def applyMatrix(matrix, z):
+    return complex(z.real * matrix[0] + z.imag * matrix[1] + matrix[2], 
+             z.real * matrix[3] + z.imag * matrix[4] + matrix[5] )
+             
+def matrixMultiply(matrix1, matrix2):
+    m1 = [matrix1[0:3], matrix1[3:6] ] # don't need last row
+    m2 = [matrix2[0:3], matrix2[3:6], [0,0,1]]
 
-def parse_path(pathdef, current_pos=0j, scaler=lambda z : z):
+    out = []
+    
+    for i in range(2):
+        for j in range(3):
+            out.append( sum(m1[i][k]*m2[k][j] for k in range(3)) )
+            
+    return out
+
+def parse_path(pathdef, current_pos=0j, matrix = None):
+    if matrix is None:
+        scaler=lambda z : z
+    else:
+        scaler=lambda z : applyMatrix(matrix, z)
+
     # In the SVG specs, initial movetos are absolute, even if
     # specified as 'm'. This is the default behavior here as well.
     # But if you pass in a current_pos variable, the initial moveto
@@ -345,7 +366,7 @@ def sizeFromString(text):
     """
     text = re.sub(r'\s',r'', text)
     try:
-        return float(text) # NOT mm
+        return float(text)*25.4/96 # px
     except:
         if text[-1] == '%':
             return float(text[:-1]) # NOT mm
@@ -358,11 +379,12 @@ def sizeFromString(text):
             return x # NOT mm
 
 def rgbFromColor(colorName):
-    colorName = re.sub(r'\s+', r'', colorName.lower())
+    colorName = colorName.strip().lower()
     if colorName == 'none':
         return None
-    elif colorName.startswith('rgb('):
-        colors = re.split(r'[\)\,]', colorName[4:])[:3]
+    cmd = re.split(r'[\s(),]+', colorName)
+    if cmd[0] == 'rgb':
+        colors = cmd[1:4]
         outColor = []
         for c in colors:
             if c.endswith('%'):
@@ -380,8 +402,6 @@ def rgbFromColor(colorName):
         
         
 def getPathsFromSVG(svg,yGrowsUp=True):
-    paths = []
-    
     def updateStateCommand(state,cmd,arg):
         if cmd == 'fill':
             state.fill = rgbFromColor(arg)
@@ -413,17 +433,64 @@ def getPathsFromSVG(svg,yGrowsUp=True):
                 pass
             
         return state
+        
+    def updateMatrix(tree, matrix):
+        def reorder(a,b,c,d,e,f):
+            return [a,c,e, b,d,f]            
+    
+        try:
+            cmd = re.split(r'[,()\s]+', tree.attrib['transform'].strip().lower())
+            
+            updateMatrix = None
+            
+            if cmd[0] == 'matrix':
+                updateMatrix = reorder(*list(map(float, cmd[1:7])))
+            elif cmd[0] == 'translate':
+                x = float(cmd[1])
+                if len(cmd) >= 3 and cmd[2] != '':
+                    y = float(cmd[2])
+                else:
+                    y = 0
+                updateMatrix = reorder(1,0,0,1,x,y)
+            elif cmd[0] == 'scale':
+                x = float(cmd[1])
+                if len(cmd) >= 3 and cmd[2] != '':
+                    y = float(cmd[2])
+                else:
+                    y = 1
+                updateMatrix = reorder(x,0,0, y,0,0)
+            elif cmd[0] == 'rotate':
+                theta = float(cmd[1]) * math.pi / 180.
+                c = math.cos(theta)
+                s = math.sin(theta)
+                updateMatrix = [c, -s, 0,  s, c, 0]
+                if len(cmd) >= 4 and cmd[2] != '':
+                    x = float(cmd[2])
+                    y = float(cmd[3])
+                    updateMatrix = matrixMultiply(updateMatrix, [1,0,-x, 0,1,-y])
+                    updateMatrix = matrixMultiply([1,0,x, 0,1,y], updateMatrix)
+            elif cmd[0] == 'skewX':
+                theta = float(cmd[1]) * math.pi / 180.
+                updateMatrix = [1, math.tan(theta), 0,  0,1,0]
+            elif cmd[0] == 'skewY':
+                theta = float(cmd[1]) * math.pi / 180.
+                updateMatrix = [1,0,0, math.tan(theta),1,0]
+                
+            return matrixMultiply(matrix, updateMatrix)
+        except:
+            return matrix
 
-    def getPaths(paths, scaler, tree, state):
+    def getPaths(paths, matrix, tree, state):
         tag = re.sub(r'.*}', '', tree.tag)
         state = updateState(tree, state)
         if tag == 'path':
-            path = parse_path(tree.attrib['d'], scaler=scaler)
+            path = parse_path(tree.attrib['d'], matrix=matrix)
             path.svgState = updateState(tree, state)
             paths.append(path)
-        else:
+        elif tag == 'g' or tag == 'svg':
+            matrix = updateMatrix(tree, matrix)
             for child in tree:
-                getPaths(paths, scaler, child, state)
+                getPaths(paths, matrix, child, state)
 
     def scale(width, height, viewBox, z):
         x = (z.real - viewBox[0]) / (viewBox[2] - viewBox[0]) * width
@@ -432,13 +499,25 @@ def getPathsFromSVG(svg,yGrowsUp=True):
         else:
             y = (z.imag - viewBox[1]) / (viewBox[3] - viewBox[1]) * height
         return complex(x,y)
+        
+    paths = []
     
     width = sizeFromString(svg.attrib['width'])
     height = sizeFromString(svg.attrib['height'])
-    viewBox = map(float, re.split(r'[\s,]+', svg.attrib['viewBox']))
-    scaler = lambda z : scale(width, height, viewBox, z)
-    getPaths(paths, scaler, svg, path.SVGState())
-    return paths, scaler(complex(viewBox[0], viewBox[1])), scaler(complex(viewBox[2], viewBox[3]))
+    viewBox = list(map(float, re.split(r'[\s,]+', svg.attrib['viewBox'])))
+    
+    matrix = [ width/(viewBox[2]-viewBox[0]), 0, -viewBox[0]* width/(viewBox[2]-viewBox[0]), 0 ] 
+    if yGrowsUp:
+        matrix += [-height/(viewBox[3]-viewBox[1]), viewBox[3]*height/(viewBox[3]-viewBox[1]) ]
+    else:
+        matrix += [height/(viewBox[3]-viewBox[1]), -viewBox[1]*height/(viewBox[3]-viewBox[1]) ]
+    
+    getPaths(paths, matrix, svg, path.SVGState())
+
+    scaler = lambda z : applyMatrix(matrix, z)
+    
+    return ( paths, applyMatrix(matrix, complex(viewBox[0], viewBox[1])), 
+                applyMatrix(matrix, complex(viewBox[2], viewBox[3])) )
 
 def getPathsFromSVGFile(filename,yGrowsUp=True):
     return getPathsFromSVG(ET.parse(filename).getroot(),yGrowsUp=yGrowsUp)

@@ -280,7 +280,7 @@ def parseHPGL(data,dpi=(1016.,1016.)):
     for cmd in re.sub(r'\s',r'',data).split(';'):
         if cmd.startswith('PD'):
             try:
-                coords = map(float, cmd[2:].split(','))
+                coords = list(map(float, cmd[2:].split(',')))
                 for i in range(0,len(coords),2):
                     data[pen].append((coords[i]*scale[0], coords[i+1]*scale[1]))
             except:
@@ -288,7 +288,7 @@ def parseHPGL(data,dpi=(1016.,1016.)):
                 # ignore no-movement PD/PU
         elif cmd.startswith('PU'):
             try:
-                coords = map(float, cmd[2:].split(','))
+                coords = list(map(float, cmd[2:].split(',')))
                 data[pen].append(segment)
                 segment = [(coords[-2]*scale[0], coords[-1]*scale[1])]
             except:
@@ -313,8 +313,8 @@ def parseHPGL(data,dpi=(1016.,1016.)):
     
 def emitHPGL(data, pens=None):
     def hpglCoordinates(offset,point):
-        x = (point[0]-offset) * 1016. / 25.4
-        y = (point[1]-offset) * 1016. / 25.4
+        x = (point[0]-offset[0]) * 1016. / 25.4
+        y = (point[1]-offset[1]) * 1016. / 25.4
         return str(int(round(x)))+','+str(int(round(y)))
 
     hpgl = []
@@ -487,11 +487,11 @@ if __name__ == '__main__':
             elif opt in ('-S', '--send-speed'):
                 sendSpeed = int(arg)
             elif opt in ('-a', '--area'):
-                v = map(float, arg.split(','))
+                v = list(map(float, arg.split(',')))
                 plotter.xyMin = (v[0],v[1])
                 plotter.xyMax = (v[2],v[3])
             elif opt in ('-D', '--input-dpi'):
-                v = map(float, arg.split(','))
+                v = list(map(float, arg.split(',')))
                 if len(v) > 1:
                     dpi = v[0:2]
                 else:
