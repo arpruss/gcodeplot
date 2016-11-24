@@ -55,6 +55,9 @@ class Scale(object):
         self.offset = offset
         self.scale = scale
         
+    def clone(self):
+        return Scale(scale=self.scale, offset=self.offset)
+        
     def __repr__(self):
         return str(self.scale)+','+str(self.offset)
 
@@ -240,14 +243,20 @@ def emitGcode(data, pens = {}, scale = Scale(), plotter=Plotter(), scalingMode=S
 
     for pen in data:
         gcode.append( ((gcodePause+' load pen: ') if pen is not 1 else '; use pen ')+describePen(pens,pen))
+        
         if pen is not 1:
             state.curZ = None
             state.curXY = None
+            
+        s = scale.clone()
+
+        if pens is not None and pen in pens:
+            s.offset = (s.offset[0]-pens[pen].offset[0],s.offset[0]-pens[pen].offset[0])
 
         for segment in data[pen]:
-            penMove(False, plotter.moveSpeed, scale.scalePoint(segment[0]))
+            penMove(False, plotter.moveSpeed, s.scalePoint(segment[0]))
             for i in range(1,len(segment)):
-                penMove(True, plotter.drawSpeed, scale.scalePoint(segment[i]))
+                penMove(True, plotter.drawSpeed, s.scalePoint(segment[i]))
 
     park()
     
@@ -302,21 +311,24 @@ def parseHPGL(data,dpi=(1016.,1016.)):
         
     return {1:segments}
     
-def emitHPGL(data):
-    def hpglCoordinates(point):
-        x = point[0] * 1016. / 25.4
-        y = point[1] * 1016. / 25.4
+def emitHPGL(data, pens=None):
+    def hpglCoordinates(offset,point):
+        x = (point[0]-offset) * 1016. / 25.4
+        y = (point[1]-offset) * 1016. / 25.4
         return str(int(round(x)))+','+str(int(round(y)))
 
     hpgl = []
     hpgl.append('IN')
     for pen in sorted(data):
+        if pens is not None and pen in pens:
+            offset = pens[pen].offset
+        else:
+            offset = (0.,0.)
         hpgl.append('SP'+str(pen))
         for segment in data[pen]:
-            hpgl.append('PU'+hpglCoordinates(segment[0]))
+            hpgl.append('PU'+hpglCoordinates(offset,segment[0]))
             for i in range(1,len(segment)):
-                hpgl.append('PD'+hpglCoordinates(segment[i]))
-                # TODO: combine PD commands
+                hpgl.append('PD'+hpglCoordinates(offset,segment[i]))
     hpgl.append('PU')
     hpgl.append('')
     return ';'.join(hpgl)
@@ -366,7 +378,7 @@ def parseSVG(svgTree, tolerance=0.05, shader=None, strokeAll=False, pens=None):
             grayscale = sum(path.svgState.fill) / 3. 
             mode = Shader.MODE_NONZERO if path.svgState.fillRule == 'nonzero' else Shader.MODE_EVEN_ODD
             if path.svgState.fillOpacity is not None:
-                grayscale *= path.svgState.fillOpacity # TODO: real alpha!
+                grayscale = grayscale * path.svgState.fillOpacity + 1. - path.svgState.fillOpacity # TODO: real alpha!
             fillLines = shader.shade(lines, grayscale, avoidOutline=(path.svgState.stroke is None), mode=mode)
             for line in fillLines:
                 data[pen].append([(line[0].real,line[0].imag),(line[1].real,line[1].imag)])
@@ -558,8 +570,8 @@ if __name__ == '__main__':
  -O|--shading-avoid-outline*: avoid going over outline twice when shading
  -o|--optimize-timeout=t: timeout on optimization attempt (seconds; will be retried once; set to 0 to turn off optimization) [default 30]
  -c|--config-file=filename: read arguments, one per line, from filename
- TODO -w|--gcode-pause=cmd: gcode pause command [default: @pause]
- TODO -P|--pens=penfile: read output pens from penfile
+ -w|--gcode-pause=cmd: gcode pause command [default: @pause]
+ -P|--pens=penfile: read output pens from penfile
  
  The options with an asterisk are default off and can be turned off again by adding "no-" at the beginning to the long-form option, e.g., --no-stroke-all.
 """)
@@ -596,7 +608,7 @@ if __name__ == '__main__':
         penData = removePenBob(penData)
 
     if hpglOut:
-        g = emitHPGL(penData)
+        g = emitHPGL(penData, pens=pens)
     else:    
         g = emitGcode(penData, scale=scale, align=align, scalingMode=scalingMode, tolerance=tolerance, 
                 plotter=plotter, gcodePause=gcodePause, pens=pens)
