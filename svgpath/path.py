@@ -537,8 +537,8 @@ class Path(MutableSequence):
             special = None
             if i == keepSubpathIndex:
                 special = subpath[keepPointIndex]
-#            points = removeCollinear(subpath, error=error/2., pointsToKeep=keep)
-            points = subpath
+            points = removeCollinear(subpath, error=error/2., pointsToKeep=keep)
+#            points = subpath
             
             for j in range(len(points)-1):
                 linearPath.append(Line(points[j], points[j+1]))

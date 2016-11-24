@@ -61,6 +61,8 @@ class Shader(object):
         
         if y > minY + spacing:
             y -= spacing
+            
+        y += 0.01
         
         odd = False
 
@@ -75,7 +77,7 @@ class Shader(object):
                     break
                 if z1.imag < y < z.imag or z.imag < y < z1.imag:
                     if z1.real == z.real:
-                        intersections.append(( complex(z.real, y), z1.imag<y, line))
+                        intersections.append(( complex(z.real, y), z.imag<y, line))
                     else:
                         m = (z1.imag-z.imag)/(z1.real-z.real)
                         # m * (x - z.real) = y - z.imag
@@ -108,7 +110,7 @@ class Shader(object):
                 all.append( (all[-1][1], thisLine[0][0]) )
                 
             all += thisLine
-            
+                
             odd = not odd
                 
             y += spacing

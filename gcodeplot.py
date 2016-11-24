@@ -118,7 +118,7 @@ def removePenBob(data):
         if outSegments:
             outData[pen] = outSegments
         
-    return data
+    return outData
         
 def dedup(data):
     curPoint = None
@@ -606,6 +606,11 @@ if __name__ == '__main__':
         for pen in penData:
             penData[pen] = anneal.optimize(penData[pen], timeout=optimizationTimeOut)
         penData = removePenBob(penData)
+        
+    if len(penData) > 1:
+        sys.stderr.write("Uses the following pens:\n")
+        for pen in penData:
+            sys.stderr.write(describePen(pens, pen)+"\n")
 
     if hpglOut:
         g = emitHPGL(penData, pens=pens)
