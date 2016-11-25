@@ -42,19 +42,24 @@ def approximate(path, start, end, start_point, end_point, max_error, depth, max_
         mid_point = path.point(mid)
         return ( approximate(path, start, mid, start_point, mid_point, max_error, depth+1, max_depth)[:-1] + 
                     approximate(path, mid, end, mid_point, end_point, max_error, depth+1, max_depth) )
-
-def length(points, a, b):
-    return sum(abs(points[i+1]-points[i]) for i in range(a,b))
                     
 def removeCollinear(points, error, pointsToKeep=set()):
     out = []
+    
+    lengths = [0]
+
+    for i in range(1,len(points)):
+        lengths.append(lengths[-1] + abs(points[i]-points[i-1]))
+        
+    def length(a,b):
+        return lengths[b] - lengths[a]
     
     i = 0
     
     while i < len(points):
         j = len(points) - 1
         while i < j:
-            deviationSquared = (length(points, i, j)/2)**2 - (abs(points[j]-points[i])/2)**2
+            deviationSquared = (length(i, j)/2)**2 - (abs(points[j]-points[i])/2)**2
             if deviationSquared <= error ** 2 and set(range(i+1,j)).isdisjoint(pointsToKeep):
                 out.append(points[i])
                 i = j
@@ -62,7 +67,7 @@ def removeCollinear(points, error, pointsToKeep=set()):
             j -= 1
         out.append(points[j])
         i += 1
-        
+
     return out
 
 class Segment(object):
