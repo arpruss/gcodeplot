@@ -413,7 +413,7 @@ if __name__ == '__main__':
     sendPort = None
     sendSpeed = 115200
     hpglLength = 279.4
-    scalingMode = SCALE_FIT
+    scalingMode = SCALE_NONE
     shader = Shader()
     align = [ALIGN_NONE, ALIGN_NONE]
     plotter = Plotter()
@@ -544,7 +544,7 @@ if __name__ == '__main__':
         sys.stderr.write("""
  -h|--help: this
  -r|--allow-repeats*: do not deduplicate paths
- -f|--scale=mode: scaling option: none(n), fit(f), down-only(d)
+ -f|--scale=mode: scaling option: none(n), fit(f), down-only(d) [default none]
  -D|--input-dpi=xdpi[,ydpi]: hpgl dpi
  -t|--tolerance=x: ignore (some) deviations of x millimeters or less [default 0.05]
  -s|--send=port: send gcode to serial port instead of stdout
