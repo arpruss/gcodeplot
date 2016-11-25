@@ -365,9 +365,12 @@ class Path(MutableSequence):
         self._segments = list(segments)
         self._length = None
         self._lengths = None
-        self.svgState = SVGState()
         if 'closed' in kw:
             self.closed = kw['closed']
+        if 'svgState' in kw:
+            self.svgState = kw['svgState']
+        else:
+            self.svgState = SVGState()
 
     def __getitem__(self, index):
         return self._segments[index]

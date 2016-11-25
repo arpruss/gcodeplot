@@ -185,11 +185,13 @@ def matrixMultiply(matrix1, matrix2):
             
     return out
 
-def parse_path(pathdef, current_pos=0j, matrix = None):
+def parse_path(pathdef, current_pos=0j, matrix = None, svgState=None):
     if matrix is None:
         scaler=lambda z : z
     else:
         scaler=lambda z : applyMatrix(matrix, z)
+    if svgState is None:
+        svgState = path.SVGState()
 
     # In the SVG specs, initial movetos are absolute, even if
     # specified as 'm'. This is the default behavior here as well.
@@ -199,7 +201,7 @@ def parse_path(pathdef, current_pos=0j, matrix = None):
     # Reverse for easy use of .pop()
     elements.reverse()
 
-    segments = path.Path()
+    segments = path.Path(svgState = svgState)
     start_pos = None
     command = None
 
@@ -484,8 +486,8 @@ def getPathsFromSVG(svg,yGrowsUp=True):
         tag = re.sub(r'.*}', '', tree.tag)
         state = updateState(tree, state)
         if tag == 'path':
-            path = parse_path(tree.attrib['d'], matrix=matrix)
-            path.svgState = updateState(tree, state)
+            svgState = updateState(tree, state)
+            path = parse_path(tree.attrib['d'], matrix=matrix, svgState=svgState)
             paths.append(path)
         elif tag == 'g' or tag == 'svg':
             matrix = updateMatrix(tree, matrix)
