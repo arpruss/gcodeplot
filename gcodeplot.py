@@ -158,6 +158,26 @@ def describePen(pens, pen):
     else:
         return str(pen)
     
+def commandsToGcode(commands, plotter=Plotter()):
+    gcode = []
+    gcode.append('G0 S1 E0')
+    gcode.append('G1 S1 E0')
+    gcode.append('G21; millimeters')
+
+    gcode.append('G28; home')
+    
+    for command in commands:
+        if command == 'lowerleft':
+            gcode.append('G1 F%.1f Z%.3f; pen park' % (plotter.zSpeed*60., plotter.safeUpZ))
+            gcode.append('G1 F%.1f Y%.3f' % (plotter.moveSpeed*60.,plotter.xyMin[1]))
+            gcode.append('G1 F%.1f X%.3f' % (plotter.moveSpeed*60.,plotter.xyMin[0]))
+        elif command == 'up':
+            gcode.append('G0 F%.1f Z%.3f; pen up' % (plotter.zSpeed*60., plotter.penUpZ))
+        elif command == 'down':
+             gcode.append('G0 F%.1f Z%.3f; pen down' % (plotter.zSpeed*60., plotter.penDownZ))
+
+    return gcode
+
 def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align = None, tolerance = 0, gcodePause="@pause"):
     xyMin = [float("inf"),float("inf")]
     xyMax = [float("-inf"),float("-inf")]
@@ -178,11 +198,11 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
     
     if scalingMode == SCALE_NONE:
         if not allFit:
-            sys.stderr.write("Drawing out of range "+str(xyMin)+" "+str(xyMax))
+            sys.stderr.write("Drawing out of range: "+str(xyMin)+" "+str(xyMax)+"\n")
             return None
     elif scalingMode != SCALE_DOWN_ONLY or not allFit:
         if xyMin[0] > xyMax[0]:
-            sys.stderr.write("No points.")
+            sys.stderr.write("No points.\n")
             return None
         scale = Scale()
         scale.fit(plotter, xyMin, xyMax)
@@ -410,6 +430,48 @@ def getConfigOpts(filename):
     return opts
     
 if __name__ == '__main__':
+
+    def help():
+        sys.stdout.write("gcodeplot.py [options] [inputfile [> output.gcode]\n")
+        sys.stdout.write("""
+ -h|--help: this
+ -r|--allow-repeats*: do not deduplicate paths
+ -f|--scale=mode: scaling option: none(n), fit(f), down-only(d) [default none]
+ -D|--input-dpi=xdpi[,ydpi]: hpgl dpi
+ -t|--tolerance=x: ignore (some) deviations of x millimeters or less [default 0.05]
+ -s|--send=port: send gcode to serial port instead of stdout
+ -S|--send-speed=baud: set baud rate for sending
+ -x|--align-x=mode: horizontal alignment: none(n), left(l), right(r) or center(c)
+ -y|--align-y=mode: vertical alignment: none(n), bottom(b), top(t) or center(c)
+ -a|--area=x1,y1,x2,y2: gcode print area in millimeters
+ -Z|--pen-up-z=z: z-position for pen-up (millimeters)
+ -z|--pen-down-z=z: z-position for pen-down (millimeters)
+ -p|--parking-z=z: z-position for parking (millimeters)
+ -Z|--pen-up-z=z: z-position for pen-up (millimeters)
+ -z|--pen-down-z=z: z-position for pen-down (millimeters)
+ -Z|--pen-up-speed=z: speed for moving with pen up (millimeters/second)
+ -z|--pen-down-speed=z: speed for moving with pen down (millimeters/second)
+ -u|--z-speed=s: speed for up/down movement (millimeters/second)
+ -H|--hpgl-out*: output is HPGL, not gcode; most options ignored [default: off]
+ -T|--shading-threshold=n: darkest grayscale to leave unshaded (decimal, 0. to 1.; set to 0 to turn off SVG shading) [default 1.0]
+ -m|--shading-lightest=x: shading spacing for lightest colors (millimeters) [default 3.0]
+ -M|--shading-darkest=x: shading spacing for darkest color (millimeters) [default 0.5]
+ -A|--shading-angle=x: shading angle (degrees) [default 45]
+ -X|--shading-crosshatch*: cross hatch shading
+ -L|--stroke-all*: stroke even regions specified by SVG to have no stroke
+ -O|--shading-avoid-outline*: avoid going over outline twice when shading
+ -o|--optimize-timeout=t: timeout on optimization attempt (seconds; will be retried once; set to 0 to turn off optimization) [default 30]
+ -c|--config-file=filename: read arguments, one per line, from filename
+ -w|--gcode-pause=cmd: gcode pause command [default: @pause]
+ -P|--pens=penfile: read output pens from penfile
+ -l|--lower-left: gcode manually park and move pen to lower left [needs --send]
+ -u|--up: gcode move pen to up position [needs --send]
+ -d|--down: gcode move pen to down position [needs --send]
+ 
+ The options with an asterisk are default off and can be turned off again by adding "no-" at the beginning to the long-form option, e.g., --no-stroke-all.
+""")
+    
+
     tolerance = 0.05
     doDedup = True    
     sendPort = None
@@ -425,16 +487,18 @@ if __name__ == '__main__':
     optimizationTimeOut = 30
     dpi = (1016., 1016.)
     pens = {1:Pen('1 (0.,0.) black default')}
+    commands = []
     
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "w:P:o:Oc:LT:M:m:A:XHrf:dna:D:t:s:S:x:y:z:Z:p:f:F:u:", 
-                        ["allow-repeats", "no-allow-repeats", "scale=", "config-file=",
+        opts, args = getopt.getopt(sys.argv[1:], "hdulw:P:o:Oc:LT:M:m:A:XHrf:dna:D:t:s:S:x:y:z:Z:p:f:F:u:", 
+                        ["help", "down", "up", "lower-left", "allow-repeats", "no-allow-repeats", "scale=", "config-file=",
                         "area=", 'align-x=', 'align-y=', 'optimize-timeout=', "pens=",
                         'input-dpi=', 'tolerance=', 'send=', 'send-speed=', 'pen-down-z=', 'pen-up-z=', 'parking-z=',
                         'pen-down-speed=', 'pen-up-speed=', 'z-speed=', 'hpgl-out', 'no-hpgl-out', 'shading-threshold=',
                         'shading-angle=', 'shading-crosshatch', 'no-shading-crosshatch', 'shading-avoid-outline', 
                         'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all', 'gcode-pause'], )
-        if len(args) != 1:
+
+        if len(args) + len(opts) == 0:
             raise getopt.GetoptError("invalid commandline")
 
         i = 0
@@ -537,47 +601,35 @@ if __name__ == '__main__':
                 opts = opts[:i+1] + configOpts + opts[i+1:]
             elif opt in ('-o', '--optimization-timeout'):
                 optimizationTimeOut = float(arg)
+            elif opt in ('-l', '--lower-left'):
+                commands.append('lower-left')
+            elif opt in ('-u', '--up'):
+                commands.append('up')
+            elif opt in ('-d', '--down'):
+                commands.append('down')
+            elif opt in ('-h', '--help'):
+                help()
+                sys.exit(0)
             else:
                 raise ValueError("Unrecognized argument "+opt)
             i += 1
         
     except getopt.GetoptError:
-        sys.stderr.write("gcodeplot.py [options] inputfile [> output.gcode]\n")
-        sys.stderr.write("""
- -h|--help: this
- -r|--allow-repeats*: do not deduplicate paths
- -f|--scale=mode: scaling option: none(n), fit(f), down-only(d) [default none]
- -D|--input-dpi=xdpi[,ydpi]: hpgl dpi
- -t|--tolerance=x: ignore (some) deviations of x millimeters or less [default 0.05]
- -s|--send=port: send gcode to serial port instead of stdout
- -S|--send-speed=baud: set baud rate for sending
- -x|--align-x=mode: horizontal alignment: none(n), left(l), right(r) or center(c)
- -y|--align-y=mode: vertical alignment: none(n), bottom(b), top(t) or center(c)
- -a|--area=x1,y1,x2,y2: gcode print area in millimeters
- -Z|--pen-up-z=z: z-position for pen-up (millimeters)
- -z|--pen-down-z=z: z-position for pen-down (millimeters)
- -p|--parking-z=z: z-position for parking (millimeters)
- -Z|--pen-up-z=z: z-position for pen-up (millimeters)
- -z|--pen-down-z=z: z-position for pen-down (millimeters)
- -Z|--pen-up-speed=z: speed for moving with pen up (millimeters/second)
- -z|--pen-down-speed=z: speed for moving with pen down (millimeters/second)
- -u|--z-speed=s: speed for up/down movement (millimeters/second)
- -H|--hpgl-out*: output is HPGL, not gcode; most options ignored [default: off]
- -T|--shading-threshold=n: darkest grayscale to leave unshaded (decimal, 0. to 1.; set to 0 to turn off SVG shading) [default 1.0]
- -m|--shading-lightest=x: shading spacing for lightest colors (millimeters) [default 3.0]
- -M|--shading-darkest=x: shading spacing for darkest color (millimeters) [default 0.5]
- -A|--shading-angle=x: shading angle (degrees) [default 45]
- -X|--shading-crosshatch*: cross hatch shading
- -L|--stroke-all*: stroke even regions specified by SVG to have no stroke
- -O|--shading-avoid-outline*: avoid going over outline twice when shading
- -o|--optimize-timeout=t: timeout on optimization attempt (seconds; will be retried once; set to 0 to turn off optimization) [default 30]
- -c|--config-file=filename: read arguments, one per line, from filename
- -w|--gcode-pause=cmd: gcode pause command [default: @pause]
- -P|--pens=penfile: read output pens from penfile
- 
- The options with an asterisk are default off and can be turned off again by adding "no-" at the beginning to the long-form option, e.g., --no-stroke-all.
-""")
+        help()
         sys.exit(2)
+        
+    if len(commands) == 0 and len(args) == 0:
+        help()
+        sys.exit(2)
+        
+    if len(commands):
+        if sendPort is None:
+            sys.stderr.write("Need to specify --send=port to send gcode commands directly.")
+            sys.exit(1)
+        import utils.sendgcode as sendgcode
+        gcode = commandsToGcode(commands, plotter=plotter)
+        sendgcode.sendGcode(port=sendPort, speed=115200, commands=gcode, gcodePause=gcodePause)
+        sys.exit(0)
 
     with open(args[0]) as f:
         data = f.read()
