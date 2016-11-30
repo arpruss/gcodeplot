@@ -167,7 +167,7 @@ def commandsToGcode(commands, plotter=Plotter()):
     gcode.append('G28; home')
     
     for command in commands:
-        if command == 'lowerleft':
+        if command == 'lower-left':
             gcode.append('G1 F%.1f Z%.3f; pen park' % (plotter.zSpeed*60., plotter.safeUpZ))
             gcode.append('G1 F%.1f Y%.3f' % (plotter.moveSpeed*60.,plotter.xyMin[1]))
             gcode.append('G1 F%.1f X%.3f' % (plotter.moveSpeed*60.,plotter.xyMin[0]))
@@ -283,7 +283,8 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
 
     park()
     
-    sys.stderr.write('Estimated time %dm %.1fs\n' % (state.time // 60, state.time % 60))
+    sys.stderr.write('Estimated printing time: %dm %.1fs\n' % (state.time // 60, state.time % 60))
+    sys.stderr.flush()
 
     return gcode
     
@@ -678,7 +679,7 @@ if __name__ == '__main__':
             if hpglOut:
                 sendgcode.sendHPGL(port=sendPort, speed=115200, commands=g)
             else:
-                sendgcode.sendGcode(port=sendPort, speed=115200, commands=g, gcodePause=gcodePause)
+                sendgcode.sendGcode(port=sendPort, speed=115200, commands=g, gcodePause=gcodePause, plotter=plotter)
         else:    
             if hpglOut:
                 sys.stdout.write(g)
