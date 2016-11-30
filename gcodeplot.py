@@ -20,7 +20,7 @@ ALIGN_CENTER = 3
 
 class Plotter(object):
     def __init__(self, xyMin=(10,8), xyMax=(192,150), 
-            drawSpeed=35, moveSpeed=40, zSpeed=5, penDownZ = 13.5, penUpZ = 17, safeUpZ = 40):
+            drawSpeed=35, moveSpeed=40, zSpeed=5, penDownZ = 14.5, penUpZ = 17, safeUpZ = 40):
         self.xyMin = xyMin
         self.xyMax = xyMax
         self.drawSpeed = drawSpeed
@@ -158,11 +158,14 @@ def describePen(pens, pen):
     else:
         return str(pen)
     
-def emitGcode(data, pens = {}, scale = Scale(), plotter=Plotter(), scalingMode=SCALE_NONE, align = None, tolerance = 0, gcodePause="@pause"):
+def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align = None, tolerance = 0, gcodePause="@pause"):
     xyMin = [float("inf"),float("inf")]
     xyMax = [float("-inf"),float("-inf")]
     
     allFit = True
+    
+    scale = Scale()
+    scale.offset = (plotter.xyMin[0],plotter.xyMin[1])
 
     for pen in data:
         for segment in data[pen]:
@@ -175,7 +178,7 @@ def emitGcode(data, pens = {}, scale = Scale(), plotter=Plotter(), scalingMode=S
     
     if scalingMode == SCALE_NONE:
         if not allFit:
-            sys.stderr.write("Drawing out of range.")
+            sys.stderr.write("Drawing out of range "+str(xyMin)+" "+str(xyMax))
             return None
     elif scalingMode != SCALE_DOWN_ONLY or not allFit:
         if xyMin[0] > xyMax[0]:
@@ -409,7 +412,6 @@ def getConfigOpts(filename):
 if __name__ == '__main__':
     tolerance = 0.05
     doDedup = True    
-    scale = Scale()
     sendPort = None
     sendSpeed = 115200
     hpglLength = 279.4
@@ -615,7 +617,7 @@ if __name__ == '__main__':
     if hpglOut:
         g = emitHPGL(penData, pens=pens)
     else:    
-        g = emitGcode(penData, scale=scale, align=align, scalingMode=scalingMode, tolerance=tolerance, 
+        g = emitGcode(penData, align=align, scalingMode=scalingMode, tolerance=tolerance, 
                 plotter=plotter, gcodePause=gcodePause, pens=pens)
 
     if g:
