@@ -1,4 +1,5 @@
 #!/usr/bin/python
+from __future__ import print_function
 import re
 import sys
 import getopt
@@ -440,7 +441,7 @@ if __name__ == '__main__':
  -f|--scale=mode: scaling option: none(n), fit(f), down-only(d) [default none]
  -D|--input-dpi=xdpi[,ydpi]: hpgl dpi
  -t|--tolerance=x: ignore (some) deviations of x millimeters or less [default 0.05]
- -s|--send=port: send gcode to serial port instead of stdout
+ -s|--send=port*: send gcode to serial port instead of stdout
  -S|--send-speed=baud: set baud rate for sending
  -x|--align-x=mode: horizontal alignment: none(n), left(l), right(r) or center(c)
  -y|--align-y=mode: vertical alignment: none(n), bottom(b), top(t) or center(c)
@@ -469,7 +470,7 @@ if __name__ == '__main__':
  -u|--up: gcode move pen to up position [needs --send]
  -d|--down: gcode move pen to down position [needs --send]
  
- The options with an asterisk are default off and can be turned off again by adding "no-" at the beginning to the long-form option, e.g., --no-stroke-all.
+ The options with an asterisk are default off and can be turned off again by adding "no-" at the beginning to the long-form option, e.g., --no-stroke-all or --no-send.
 """)
     
 
@@ -488,16 +489,18 @@ if __name__ == '__main__':
     optimizationTimeOut = 30
     dpi = (1016., 1016.)
     pens = {1:Pen('1 (0.,0.) black default')}
+    doDump = False
+    penFilename = None
     commands = []
     
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "hdulw:P:o:Oc:LT:M:m:A:XHrf:dna:D:t:s:S:x:y:z:Z:p:f:F:u:", 
+        opts, args = getopt.getopt(sys.argv[1:], "hdulw:P:o:Oc:LT:M:m:A:XHrf:dna:D:t:s:S:x:y:z:Z:p:f:F:", 
                         ["help", "down", "up", "lower-left", "allow-repeats", "no-allow-repeats", "scale=", "config-file=",
                         "area=", 'align-x=', 'align-y=', 'optimize-timeout=', "pens=",
                         'input-dpi=', 'tolerance=', 'send=', 'send-speed=', 'pen-down-z=', 'pen-up-z=', 'parking-z=',
                         'pen-down-speed=', 'pen-up-speed=', 'z-speed=', 'hpgl-out', 'no-hpgl-out', 'shading-threshold=',
                         'shading-angle=', 'shading-crosshatch', 'no-shading-crosshatch', 'shading-avoid-outline', 
-                        'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all', 'gcode-pause'], )
+                        'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all', 'gcode-pause', 'dump-options'], )
 
         if len(args) + len(opts) == 0:
             raise getopt.GetoptError("invalid commandline")
@@ -513,6 +516,7 @@ if __name__ == '__main__':
                 gcodePause = arg
             elif opt in ('-p', '--pens'):
                 pens = {}
+                penFilename = arg
                 with open(arg) as f:
                     for line in f:
                         if line.strip():
@@ -551,6 +555,8 @@ if __name__ == '__main__':
                 tolerance = float(arg)
             elif opt in ('-s', '--send'):
                 sendPort = arg
+            elif opt == '--no-send':
+                sendPort = None
             elif opt in ('-S', '--send-speed'):
                 sendSpeed = int(arg)
             elif opt in ('-a', '--area'):
@@ -587,6 +593,8 @@ if __name__ == '__main__':
                 shader.angle = float(arg)
             elif opt in ('-X', '--shading-crosshatch'):
                 shader.crossHatch = True
+            elif opt == '--no-shading-crosshatch':
+                shader.crossHatch = False
             elif opt in ('-O', '--shading-avoid-outline'):
                 avoidOutline = True
             elif opt == '--no-shading-avoid-outline':
@@ -611,6 +619,8 @@ if __name__ == '__main__':
             elif opt in ('-h', '--help'):
                 help()
                 sys.exit(0)
+            elif opt in ('--dump-options'):
+                doDump = True
             else:
                 raise ValueError("Unrecognized argument "+opt)
             i += 1
@@ -618,6 +628,63 @@ if __name__ == '__main__':
     except getopt.GetoptError:
         help()
         sys.exit(2)
+        
+    if doDump:
+        print('no-allow-repeats' if doDedup else 'allow-repeats')
+        
+        print('gcode-pause=' + gcodePause)
+        
+        if penFilename is not None:
+            print('pens=' + penFilename)
+
+        if scalingMode == SCALE_NONE:
+            print('scale=none')
+        elif scalingMode == SCALE_DOWN_ONLY:
+            print('scale=down')
+        else:
+            print('scale=fit')
+        
+        if align[0] == ALIGN_LEFT:
+            print('align-x=left')
+        elif align[0] == ALIGN_CENTER:
+            print('align-x=center')
+        elif align[0] == ALIGN_RIGHT:
+            print('align-x=right')
+        else:
+            print('align-x=none')
+        
+        if align[1] == ALIGN_BOTTOM:
+            print('align-y=bottom')
+        elif align[1] == ALIGN_CENTER:
+            print('align-y=center')
+        elif align[1] == ALIGN_TOP:
+            print('align-y=top')
+        else:
+            print('align-y=none')
+            
+        print('tolerance=' + str(tolerance))
+        
+        if sendPort is not None:
+            print('send=' + str(sendPort))
+        else:
+            print('no-send')
+            
+        print('send-speed=' + str(sendSpeed))
+        print('area=%g,%g,%g,%g' % tuple(list(plotter.xyMin)+list(plotter.xyMax)))
+        print('input-dpi=%g,%g' % tuple(dpi))
+        print('pen-up-z=%g' % (plotter.penUpZ))
+        print('pen-down-z=%g' % (plotter.penDownZ))
+        print('parking-z=%g' % (plotter.safeUpZ))
+        print('hpgl-out' if hpglOut else 'no-hpgl-out')        
+        print('shading-threshold=%g' % (shader.unshadedThreshold))
+        print('shading-lightest=%g' % (shader.lightestSpacing))
+        print('shading-darkest=%g' % (shader.darkestSpacing))
+        print('shading-angle=%g' % (shader.angle))
+        print('shading-crosshatch' if shader.crossHatch else 'no-shading-crosshatch')
+        print('stroke-all' if strokeAll else 'no-stroke-all')
+        print('optimization-timeout=%g' % (optimizationTimeOut))
+        
+        sys.exit(0)
         
     if len(commands) == 0 and len(args) == 0:
         help()
