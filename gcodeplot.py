@@ -161,6 +161,7 @@ def describePen(pens, pen):
     
 def commandsToGcode(commands, plotter=Plotter()):
     gcode = []
+    gcode.append('G90')
     gcode.append('G0 S1 E0')
     gcode.append('G1 S1 E0')
     gcode.append('G21; millimeters')
@@ -213,6 +214,7 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
         
     gcode = []
 
+    gcode.append('G90')
     gcode.append('G0 S1 E0')
     gcode.append('G1 S1 E0')
     gcode.append('G21; millimeters')
