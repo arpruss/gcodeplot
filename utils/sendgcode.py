@@ -7,8 +7,13 @@ import sys
 from ast import literal_eval
 
 class FakeSerial(object):
-    def __init__(self, handle):
-        self.handle = handle
+    def __init__(self, name):
+        if file == 'stdout':
+            self.handle = sys.stdout
+        elif file == 'stderr':
+            self.handle = sys.stderr
+        else:
+            self.handle = open(name, "w")
         
     def flushInput(self):
         return
@@ -17,7 +22,8 @@ class FakeSerial(object):
         self.handle.write(data)
         
     def close(self):
-        self.handle.close()
+        if self.handle is not sys.stdout:
+            self.handle.close()
 
 def sendHPGL(port, commands):
     s = serial.Serial(port, 115200)
@@ -25,7 +31,11 @@ def sendHPGL(port, commands):
     s.write(commands)
     s.close()
 
-def sendGcode(port, commands, speed=115200, quiet = False, gcodePause="@pause", plotter=None, variables=None):    
+def sendGcode(port, commands, speed=115200, quiet = False, gcodePause="@pause", plotter=None, variables={}):
+    """
+    If variables are used, all movement should be absolute before a pause.
+    """
+
     class State(object):
         pass
         
@@ -42,7 +52,7 @@ def sendGcode(port, commands, speed=115200, quiet = False, gcodePause="@pause", 
 #    threading.Thread(target = pauseThread).start()
 
     if port.startswith('file:'):
-        s = FakeSerial(open(port[5:], 'w'))
+        s = FakeSerial(port[5:])
     else:
         s = serial.Serial(port, 115200)
     s.flushInput()
@@ -57,6 +67,11 @@ def sendGcode(port, commands, speed=115200, quiet = False, gcodePause="@pause", 
 
 ## TODO: flow control  
     state.lineNumber = 2
+    
+    def evaluate(value):
+        for x in variables:
+            value = re.sub(r'\b' + x + r'\b', '%.3f' % variables[x], value)
+        return literal_eval(value)
 
     def sendCommand(c):
         def checksum(text):
@@ -67,15 +82,30 @@ def sendGcode(port, commands, speed=115200, quiet = False, gcodePause="@pause", 
         components = c.strip().split(';')
         c = components[0].strip()
         
-        if variables and len(components) > 1:
+        if len(components) > 1:
             if '!!' in components[1]:
-                for subst in re.split(r'\s+', c.split('!!', 2)[1].strip()):
+                for subst in re.split(r'\s+', components[1].split('!!', 2)[1].strip()):
                     axis = subst[0]
-                    value = subst[1:]
-                    for x in variables:
-                        value = re.sub(r'\b' + x + r'\b', '%.3f' % variables[x], value)
-                    c = re.sub(r'\b' + axis + r'[0-9.]+', axis + literal_eval(value), c)
-        if len(c):
+                    try:
+                        value = evaluate(subst[1:])
+                        c = re.sub(r'\b' + axis + r'[-0-9.]+', axis + value, c)
+                    except:
+                        pass
+        if c:
+            ## assumes movement is always absolute
+            if re.match(r'[Gg][01]\s', c):
+                for part in re.split(r'\s+', c.upper()):
+                    if re.match(r'X[-.0-9]', part):
+                        variables['x'] = float(part[1:])
+                    elif re.match(r'Y[-.0-9]', part):
+                        variables['y'] = float(part[1:])
+                    elif re.match(r'Z[-.0-9]', part):
+                        variables['z'] = float(part[1:])
+            elif re.match(r'[Gg]28\b', c):
+                if 'x' in variables: del variables['x']
+                if 'y' in variables: del variables['y']
+                if 'z' in variables: del variables['z']
+                            
             command = 'N' + str(state.lineNumber) + ' ' + c
             command += '*' + str(checksum(command))
             s.write(command+'\n')
@@ -88,12 +118,18 @@ def sendGcode(port, commands, speed=115200, quiet = False, gcodePause="@pause", 
             print("PAUSE:"+c[len(gcodePause):]+"""
 Commands available:
  c[ontinue]
- u[p]
- d[own]
- a[bort]""") 
-            sys.stdout.flush()
+ a[bort]
+ xvalue / yvalue / zvalue: move to coordinates
+""") 
+            if variables is not None:
+                print(" variable=value")
+                
+            def showVariables():
+                print("Current values:")
+                print('\t'.join(("%s=%f" % (var, variables[var]) for var in variables)))
+                
             while True:
-                cmd = raw_input()
+                cmd = raw_input().strip().lower()
                 if cmd.startswith('c'):
                     print("Resuming.")
                     break
@@ -101,14 +137,38 @@ Commands available:
                     print("Aborting.")
                     s.close()
                     sys.exit(0)
-                elif cmd.startswith('u'):
-                    print("Pen up.")
-                    sendCommand('G0 F%.1f Z%.3f; pen up' % (plotter.zSpeed*60., plotter.penUpZ))
-                elif cmd.startswith('d'):
-                    print("Pen down.")
-                    sendCommand('G0 F%.1f Z%.3f; pen down' % (plotter.zSpeed*60., plotter.penDownZ))
+                elif '=' in cmd:
+                    try:
+                        var,value = re.split(r'\s+=\s+', cmd, 2)
+                        variables[var] = evaluate(value)
+                    except:
+                        print("Syntax error.")
+                    showVariables()
+                elif re.search('[xyz]', cmd):
+                    try:
+                        xyMove = ''
+                        zMove = ''
+                        for part in re.split('\s+', cmd):
+                            if part[0] == 'z':
+                                newZ = evaluate(part[1:])
+                                zMove = 'G0 F%.1f Z%.3f; pen up' % (600 if plotter is None else plotter.zSpeed*60., newZ)
+                            elif part[0] == 'x':
+                                newX = evaluate(part[1:])
+                                xyMove += 'X%.3f '%newX
+                            elif part[0] == 'y':
+                                newY = evaluate(part[1:])
+                                xyMove += 'Y%.3f '%newY
+                    except:
+                        print("Syntax error.")
+                        showVariables()
+                        continue
+                    if zMove:
+                        sendCommand(zMove)
+                        variables['z'] = newZ
+                    if xyMove:
+                        sendCommand('G1 F%.1f %s'%(600 if plotter is None else plotter.moveSpeed*60., xyMove))
                 else:
-                    print("Unknown command. Try: c/u/d/a.")
+                    print("Unknown command.")
         else:
             sendCommand(c)
     """

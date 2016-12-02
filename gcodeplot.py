@@ -19,6 +19,8 @@ ALIGN_LEFT = ALIGN_BOTTOM
 ALIGN_RIGHT = ALIGN_TOP
 ALIGN_CENTER = 3
 
+GCODE_HEADER = ['G90', 'G0 S1 E0', 'G1 S1 E0', 'G21; millimeters', 'G28; home']
+
 class Plotter(object):
     def __init__(self, xyMin=(10,8), xyMax=(192,150), 
             drawSpeed=35, moveSpeed=40, zSpeed=5, penDownZ = 14.5, penUpZ = 17, safeUpZ = 40):
@@ -159,28 +161,7 @@ def describePen(pens, pen):
     else:
         return str(pen)
     
-def commandsToGcode(commands, plotter=Plotter()):
-    gcode = []
-    gcode.append('G90')
-    gcode.append('G0 S1 E0')
-    gcode.append('G1 S1 E0')
-    gcode.append('G21; millimeters')
-
-    gcode.append('G28; home')
-    
-    for command in commands:
-        if command == 'lower-left':
-            gcode.append('G1 F%.1f Z%.3f; pen park' % (plotter.zSpeed*60., plotter.safeUpZ))
-            gcode.append('G1 F%.1f Y%.3f' % (plotter.moveSpeed*60.,plotter.xyMin[1]))
-            gcode.append('G1 F%.1f X%.3f' % (plotter.moveSpeed*60.,plotter.xyMin[0]))
-        elif command == 'up':
-            gcode.append('G0 F%.1f Z%.3f; pen up' % (plotter.zSpeed*60., plotter.penUpZ))
-        elif command == 'down':
-             gcode.append('G0 F%.1f Z%.3f; pen down' % (plotter.zSpeed*60., plotter.penDownZ))
-
-    return gcode
-
-def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align = None, tolerance = 0, gcodePause="@pause"):
+def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align = None, tolerance = 0, gcodePause="@pause", pauseFirstPen = False):
     xyMin = [float("inf"),float("inf")]
     xyMax = [float("-inf"),float("-inf")]
     
@@ -212,17 +193,10 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
     if align is not None:
         scale.align(plotter, xyMin, xyMax, align)
         
-    gcode = []
-
-    gcode.append('G90')
-    gcode.append('G0 S1 E0')
-    gcode.append('G1 S1 E0')
-    gcode.append('G21; millimeters')
-
-    gcode.append('G28; home')
+    gcode = GCODE_HEADER[:]
     
     def park():
-        gcode.append('G1 F%.1f Z%.3f; pen park !!Zp' % (plotter.zSpeed*60., plotter.safeUpZ))
+        gcode.append('G1 F%.1f Z%.3f; pen park !!Zpark' % (plotter.zSpeed*60., plotter.safeUpZ))
 
     park()
     gcode.append('G1 F%.1f Y%.3f' % (plotter.moveSpeed*60.,plotter.xyMin[1]))
@@ -241,14 +215,14 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
     
     def penUp():
         if state.curZ is None or state.curZ < plotter.penUpZ:
-            gcode.append('G0 F%.1f Z%.3f; pen up !!Zu' % (plotter.zSpeed*60., plotter.penUpZ))
+            gcode.append('G0 F%.1f Z%.3f; pen up !!Zup' % (plotter.zSpeed*60., plotter.penUpZ))
             if state.curZ is not None:
                 state.time += abs(plotter.penUpZ-state.curZ) / plotter.zSpeed
             state.curZ = plotter.penUpZ
         
     def penDown():
         if state.curZ is None or state.curZ != plotter.penDownZ:
-            gcode.append('G0 F%.1f Z%.3f; pen down !!Zd' % (plotter.zSpeed*60., plotter.penDownZ))
+            gcode.append('G0 F%.1f Z%.3f; pen down !!Zdown' % (plotter.zSpeed*60., plotter.penDownZ))
             state.time += abs(state.curZ-plotter.penDownZ) / plotter.zSpeed
             state.curZ = plotter.penDownZ
 
@@ -268,8 +242,6 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
             state.curXY = p
 
     for pen in data:
-        gcode.append( ((gcodePause+' load pen: ') if pen is not 1 else '; use pen ')+describePen(pens,pen))
-        
         if pen is not 1:
             state.curZ = None
             state.curXY = None
@@ -279,8 +251,15 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
         if pens is not None and pen in pens:
             s.offset = (s.offset[0]-pens[pen].offset[0],s.offset[0]-pens[pen].offset[0])
 
+        newPen = True
+
         for segment in data[pen]:
             penMove(False, plotter.moveSpeed, s.scalePoint(segment[0]))
+            
+            if newPen and (pen != 1 or pauseFirstPen):
+                gcode.append( gcodePause+' load pen: ' + describePen(pens,pen) )
+            newPen = False
+            
             for i in range(1,len(segment)):
                 penMove(True, plotter.drawSpeed, s.scalePoint(segment[i]))
 
@@ -468,9 +447,7 @@ if __name__ == '__main__':
  -c|--config-file=filename: read arguments, one per line, from filename
  -w|--gcode-pause=cmd: gcode pause command [default: @pause]
  -P|--pens=penfile: read output pens from penfile
- -l|--lower-left: gcode manually park and move pen to lower left [needs --send]
- -u|--up: gcode move pen to up position [needs --send]
- -d|--down: gcode move pen to down position [needs --send]
+ -U|--pause-at-start*: pause at start (can be included without any input file)
  
  The options with an asterisk are default off and can be turned off again by adding "no-" at the beginning to the long-form option, e.g., --no-stroke-all or --no-send.
 """)
@@ -493,15 +470,16 @@ if __name__ == '__main__':
     pens = {1:Pen('1 (0.,0.) black default')}
     doDump = False
     penFilename = None
-    commands = []
+    pauseAtStart = False
     
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "hdulw:P:o:Oc:LT:M:m:A:XHrf:dna:D:t:s:S:x:y:z:Z:p:f:F:", 
+        opts, args = getopt.getopt(sys.argv[1:], "Uhdulw:P:o:Oc:LT:M:m:A:XHrf:dna:D:t:s:S:x:y:z:Z:p:f:F:", 
                         ["help", "down", "up", "lower-left", "allow-repeats", "no-allow-repeats", "scale=", "config-file=",
                         "area=", 'align-x=', 'align-y=', 'optimize-timeout=', "pens=",
                         'input-dpi=', 'tolerance=', 'send=', 'send-speed=', 'pen-down-z=', 'pen-up-z=', 'parking-z=',
                         'pen-down-speed=', 'pen-up-speed=', 'z-speed=', 'hpgl-out', 'no-hpgl-out', 'shading-threshold=',
                         'shading-angle=', 'shading-crosshatch', 'no-shading-crosshatch', 'shading-avoid-outline', 
+                        'pause-at-start', 'no-pause-at-start',
                         'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all', 'gcode-pause', 'dump-options'], )
 
         if len(args) + len(opts) == 0:
@@ -603,6 +581,10 @@ if __name__ == '__main__':
                 avoidOutline = False
             elif opt == '--no-shading-crosshatch':
                 shader.crossHatch = False
+            elif opt == '--pause-at-start':
+                pauseAtStart = True
+            elif opt == '--no-pause-at-start':
+                pauseAtStart = False
             elif opt in ('-L', '--stroke-all'):
                 strokeAll = True
             elif opt == '--no-stroke-all':
@@ -612,12 +594,6 @@ if __name__ == '__main__':
                 opts = opts[:i+1] + configOpts + opts[i+1:]
             elif opt in ('-o', '--optimization-timeout'):
                 optimizationTimeOut = float(arg)
-            elif opt in ('-l', '--lower-left'):
-                commands.append('lower-left')
-            elif opt in ('-u', '--up'):
-                commands.append('up')
-            elif opt in ('-d', '--down'):
-                commands.append('down')
             elif opt in ('-h', '--help'):
                 help()
                 sys.exit(0)
@@ -685,19 +661,20 @@ if __name__ == '__main__':
         print('shading-crosshatch' if shader.crossHatch else 'no-shading-crosshatch')
         print('stroke-all' if strokeAll else 'no-stroke-all')
         print('optimization-timeout=%g' % (optimizationTimeOut))
+        print('pause-at-start' if pauseAtStart else 'no-pause-at-start')
         
         sys.exit(0)
         
-    if len(commands) == 0 and len(args) == 0:
-        help()
-        sys.exit(2)
+    if len(args) == 0:
+        if not pauseAtStart:
+            help()
         
-    if len(commands):
         if sendPort is None:
-            sys.stderr.write("Need to specify --send=port to send gcode commands directly.")
+            sys.stderr.write("Need to specify --send=port to be able to pause without any file.")
             sys.exit(1)
         import utils.sendgcode as sendgcode
-        gcode = commandsToGcode(commands, plotter=plotter)
+
+        gcode = commandsToGcode(GCODE_HEADER, plotter=plotter)
         sendgcode.sendGcode(port=sendPort, speed=115200, commands=gcode, gcodePause=gcodePause)
         sys.exit(0)
 
