@@ -4,6 +4,20 @@ import time
 import os
 import re
 import sys
+from ast import literal_eval
+
+class FakeSerial(object):
+    def __init__(self, handle):
+        self.handle = handle
+        
+    def flushInput(self):
+        return
+        
+    def write(self, data):
+        self.handle.write(data)
+        
+    def close(self):
+        self.handle.close()
 
 def sendHPGL(port, commands):
     s = serial.Serial(port, 115200)
@@ -11,7 +25,7 @@ def sendHPGL(port, commands):
     s.write(commands)
     s.close()
 
-def sendGcode(port, commands, speed=115200, quiet = False, gcodePause="@pause"):    
+def sendGcode(port, commands, speed=115200, quiet = False, gcodePause="@pause", plotter=None, variables=None):    
     class State(object):
         pass
         
@@ -27,15 +41,22 @@ def sendGcode(port, commands, speed=115200, quiet = False, gcodePause="@pause"):
             
 #    threading.Thread(target = pauseThread).start()
 
-    s = serial.Serial(port, 115200)
+    if port.startswith('file:'):
+        s = FakeSerial(open(port[5:], 'w'))
+    else:
+        s = serial.Serial(port, 115200)
     s.flushInput()
-#    s = open(port, 'w')
     
-    lineNumber = 1
+    class State(object):
+        pass
+        
+    state = State()
+
+    state.lineNumber = 1
     s.write('\nM110 N1\n')
 
-## TODO: flow control    
-    lineNumber = 2
+## TODO: flow control  
+    state.lineNumber = 2
 
     def sendCommand(c):
         def checksum(text):
@@ -43,14 +64,23 @@ def sendGcode(port, commands, speed=115200, quiet = False, gcodePause="@pause"):
             for c in text:
                 cs ^= ord(c)
             return cs & 0xFF
-    
-        c = re.sub(r'\s*\;.*',r'', c.strip())
+        components = c.strip().split(';')
+        c = components[0].strip()
+        
+        if variables and len(components) > 1:
+            if '!!' in components[1]:
+                for subst in re.split(r'\s+', c.split('!!', 2)[1].strip()):
+                    axis = subst[0]
+                    value = subst[1:]
+                    for x in variables:
+                        value = re.sub(r'\b' + x + r'\b', '%.3f' % variables[x], value)
+                    c = re.sub(r'\b' + axis + r'[0-9.]+', axis + literal_eval(value), c)
         if len(c):
-            command = 'N' + str(lineNumber) + ' ' + c
+            command = 'N' + str(state.lineNumber) + ' ' + c
             command += '*' + str(checksum(command))
             s.write(command+'\n')
             s.flushInput()
-            lineNumber += 1
+            state.lineNumber += 1
     
     for c in commands:
         c = c.strip()

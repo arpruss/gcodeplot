@@ -222,7 +222,7 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
     gcode.append('G28; home')
     
     def park():
-        gcode.append('G1 F%.1f Z%.3f; pen park' % (plotter.zSpeed*60., plotter.safeUpZ))
+        gcode.append('G1 F%.1f Z%.3f; pen park !!Zp' % (plotter.zSpeed*60., plotter.safeUpZ))
 
     park()
     gcode.append('G1 F%.1f Y%.3f' % (plotter.moveSpeed*60.,plotter.xyMin[1]))
@@ -241,14 +241,14 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
     
     def penUp():
         if state.curZ is None or state.curZ < plotter.penUpZ:
-            gcode.append('G0 F%.1f Z%.3f; pen up' % (plotter.zSpeed*60., plotter.penUpZ))
+            gcode.append('G0 F%.1f Z%.3f; pen up !!Zu' % (plotter.zSpeed*60., plotter.penUpZ))
             if state.curZ is not None:
                 state.time += abs(plotter.penUpZ-state.curZ) / plotter.zSpeed
             state.curZ = plotter.penUpZ
         
     def penDown():
         if state.curZ is None or state.curZ != plotter.penDownZ:
-            gcode.append('G0 F%.1f Z%.3f; pen down' % (plotter.zSpeed*60., plotter.penDownZ))
+            gcode.append('G0 F%.1f Z%.3f; pen down !!Zd' % (plotter.zSpeed*60., plotter.penDownZ))
             state.time += abs(state.curZ-plotter.penDownZ) / plotter.zSpeed
             state.curZ = plotter.penDownZ
 
