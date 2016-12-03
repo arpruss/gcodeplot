@@ -43,8 +43,8 @@ class Line(object):
                 baseRibbon = 'render(convexity=12) linear_extrude(height=wallBaseThickness) ribbon('+path+',thickness=wallBaseWidth);'
                 if tuple(self.points[0]) == tuple(self.points[-1]):
                     code.append('difference() {')
-                    code.append(baseRibbon);
-                    code.append('translate([0,0,-0.01]) linear_extrude(height=wallBaseThickness+0.02) polygon(points='+path+');')
+                    code.append(' ' + baseRibbon);
+                    code.append(' translate([0,0,-0.01]) linear_extrude(height=wallBaseThickness+0.02) polygon(points='+path+');')
                     code.append('}')
                 else:
                     code.append(baseRibbon)
