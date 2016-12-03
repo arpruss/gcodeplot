@@ -8,9 +8,9 @@ from ast import literal_eval
 
 class FakeSerial(object):
     def __init__(self, name):
-        if file == 'stdout':
+        if name == 'stdout':
             self.handle = sys.stdout
-        elif file == 'stderr':
+        elif name == 'stderr':
             self.handle = sys.stderr
         else:
             self.handle = open(name, "w")
@@ -88,8 +88,8 @@ def sendGcode(port, commands, speed=115200, quiet = False, gcodePause="@pause", 
                     axis = subst[0]
                     try:
                         value = evaluate(subst[1:])
-                        c = re.sub(r'\b' + axis + r'[-0-9.]+', axis + value, c)
-                    except:
+                        c = re.sub(r'\b' + axis + r'[0-9.\-]+', '%s%.3f' % (axis, value), c)
+                    except ValueError:
                         pass
         if c:
             ## assumes movement is always absolute
@@ -117,56 +117,81 @@ def sendGcode(port, commands, speed=115200, quiet = False, gcodePause="@pause", 
         if c.startswith(gcodePause):
             print("PAUSE:"+c[len(gcodePause):]+"""
 Commands available:
- c[ontinue]
- a[bort]
- xvalue / yvalue / zvalue: move to coordinates
-""") 
-            if variables is not None:
-                print(" variable=value")
+   c[ontinue]
+   a[bort]
+   xvalue yvalue zvalue: move absolute
+   x+value y+value z+value: move relative
+   variable=value
+   Gxxx / Mxxx / Txxx: manual gcode command""") 
                 
             def showVariables():
-                print("Current values:")
-                print('\t'.join(("%s=%f" % (var, variables[var]) for var in variables)))
+                if variables:
+                    print("\nCurrent values:")
+                    print('\t'.join(("%s=%.3g" % (var, variables[var]) for var in sorted(variables))))
+                
+            showVariables()
                 
             while True:
-                cmd = raw_input().strip().lower()
-                if cmd.startswith('c'):
+                cmdOriginalCase = raw_input("\nCOMMAND: ").strip()
+                cmd = cmdOriginalCase.lower()
+                if len(cmd) == 0:
+                    continue
+                if '=' in cmd:
+                    try:
+                        var,value = re.split(r'\s*=\s*', cmd, maxsplit=2)
+                        print (var,value)
+                        variables[var] = evaluate(value)
+                    except:
+                        print("Syntax error.")
+                    showVariables()
+                elif cmd.startswith('c'):
                     print("Resuming.")
                     break
                 elif cmd.startswith('a'):
                     print("Aborting.")
                     s.close()
                     sys.exit(0)
-                elif '=' in cmd:
-                    try:
-                        var,value = re.split(r'\s+=\s+', cmd, 2)
-                        variables[var] = evaluate(value)
-                    except:
-                        print("Syntax error.")
+                elif cmdOriginalCase[0] in 'GMT':
+                    sendCommand(cmdOriginalCase)
                     showVariables()
                 elif re.search('[xyz]', cmd):
                     try:
                         xyMove = ''
                         zMove = ''
-                        for part in re.split('\s+', cmd):
-                            if part[0] == 'z':
-                                newZ = evaluate(part[1:])
-                                zMove = 'G0 F%.1f Z%.3f; pen up' % (600 if plotter is None else plotter.zSpeed*60., newZ)
-                            elif part[0] == 'x':
-                                newX = evaluate(part[1:])
-                                xyMove += 'X%.3f '%newX
-                            elif part[0] == 'y':
-                                newY = evaluate(part[1:])
-                                xyMove += 'Y%.3f '%newY
+                        parts = re.split('\s+', cmd)
+                        i = 0
+                        while i < len(parts):
+                            part = parts[i]
+                            if part[0] in 'xyz':
+                                if len(part) == 1:
+                                    i += 1
+                                    if len(parts) <= i:
+                                        raise ValueError()
+                                    valueString = parts[i]
+                                else:
+                                    valueString = part[1:]
+                                if valueString[0] == '+':
+                                    value = variables[part[0]] + evaluate(valueString[1:])
+                                else:
+                                    value = evaluate(valueString)
+                                if part[0] == 'z':
+                                    zMove = 'G0 F%.1f Z%.3f; pen up' % (600 if plotter is None else plotter.zSpeed*60., value)
+                                elif part[0] == 'x':
+                                    xyMove += 'X%.3f '%value
+                                elif part[0] == 'y':
+                                    xyMove += 'Y%.3f '%value
+                            else:
+                                raise ValueError()
+                            i += 1
                     except:
                         print("Syntax error.")
                         showVariables()
                         continue
                     if zMove:
                         sendCommand(zMove)
-                        variables['z'] = newZ
                     if xyMove:
                         sendCommand('G1 F%.1f %s'%(600 if plotter is None else plotter.moveSpeed*60., xyMove))
+                    showVariables()
                 else:
                     print("Unknown command.")
         else:

@@ -161,7 +161,7 @@ def describePen(pens, pen):
     else:
         return str(pen)
     
-def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align = None, tolerance = 0, gcodePause="@pause", pauseFirstPen = False):
+def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align = None, tolerance = 0, gcodePause="@pause", pauseAtStart = False):
     xyMin = [float("inf"),float("inf")]
     xyMax = [float("-inf"),float("-inf")]
     
@@ -256,7 +256,7 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
         for segment in data[pen]:
             penMove(False, plotter.moveSpeed, s.scalePoint(segment[0]))
             
-            if newPen and (pen != 1 or pauseFirstPen):
+            if newPen and (pen != 1 or pauseAtStart):
                 gcode.append( gcodePause+' load pen: ' + describePen(pens,pen) )
             newPen = False
             
@@ -447,7 +447,7 @@ if __name__ == '__main__':
  -c|--config-file=filename: read arguments, one per line, from filename
  -w|--gcode-pause=cmd: gcode pause command [default: @pause]
  -P|--pens=penfile: read output pens from penfile
- -U|--pause-at-start*: pause at start (can be included without any input file)
+ -U|--pause-at-start*: pause at start (can be included without any input file to manually move stuff)
  
  The options with an asterisk are default off and can be turned off again by adding "no-" at the beginning to the long-form option, e.g., --no-stroke-all or --no-send.
 """)
@@ -665,6 +665,9 @@ if __name__ == '__main__':
         
         sys.exit(0)
         
+    variables = {'up':plotter.penUpZ, 'down':plotter.penDownZ, 'park':plotter.safeUpZ, 'left':plotter.xyMin[0],
+        'bottom':plotter.xyMin[1], 'right':plotter.xyMax[0], 'top':plotter.xyMax[1]}
+        
     if len(args) == 0:
         if not pauseAtStart:
             help()
@@ -674,8 +677,7 @@ if __name__ == '__main__':
             sys.exit(1)
         import utils.sendgcode as sendgcode
 
-        gcode = commandsToGcode(GCODE_HEADER, plotter=plotter)
-        sendgcode.sendGcode(port=sendPort, speed=115200, commands=gcode, gcodePause=gcodePause)
+        sendgcode.sendGcode(port=sendPort, speed=115200, commands=GCODE_HEADER + [gcodePause], gcodePause=gcodePause, variables=variables)
         sys.exit(0)
 
     with open(args[0]) as f:
@@ -717,7 +719,7 @@ if __name__ == '__main__':
         g = emitHPGL(penData, pens=pens)
     else:    
         g = emitGcode(penData, align=align, scalingMode=scalingMode, tolerance=tolerance, 
-                plotter=plotter, gcodePause=gcodePause, pens=pens)
+                plotter=plotter, gcodePause=gcodePause, pens=pens, pauseAtStart=pauseAtStart)
 
     if g:
         if sendPort is not None:
@@ -725,7 +727,7 @@ if __name__ == '__main__':
             if hpglOut:
                 sendgcode.sendHPGL(port=sendPort, speed=115200, commands=g)
             else:
-                sendgcode.sendGcode(port=sendPort, speed=115200, commands=g, gcodePause=gcodePause, plotter=plotter)
+                sendgcode.sendGcode(port=sendPort, speed=115200, commands=g, gcodePause=gcodePause, plotter=plotter, variables=variables)
         else:    
             if hpglOut:
                 sys.stdout.write(g)
