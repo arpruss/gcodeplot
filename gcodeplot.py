@@ -19,7 +19,7 @@ ALIGN_LEFT = ALIGN_BOTTOM
 ALIGN_RIGHT = ALIGN_TOP
 ALIGN_CENTER = 3
 
-GCODE_HEADER = ['G90', 'G0 S1 E0', 'G1 S1 E0', 'G21; millimeters', 'G28; home']
+GCODE_HEADER = ['G90; absolute', 'G0 S1 E0', 'G1 S1 E0', 'G21; millimeters', 'G28; home']
 
 class Plotter(object):
     def __init__(self, xyMin=(10,8), xyMax=(192,150), 

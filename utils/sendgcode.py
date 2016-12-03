@@ -35,6 +35,16 @@ def sendGcode(port, commands, speed=115200, quiet = False, gcodePause="@pause", 
     """
     If variables are used, all movement should be absolute before a pause.
     """
+<<<<<<< .mine
+||||||| .r73
+
+    class State(object):
+        pass
+        
+    state = State()
+    state.cmd = None
+    state.done = False
+=======
 
     if sys.version_info[0] <= 2:
         text_input = raw_input
@@ -47,14 +57,8 @@ def sendGcode(port, commands, speed=115200, quiet = False, gcodePause="@pause", 
     state = State()
     state.cmd = None
     state.done = False
+>>>>>>> .r78
     
-#    print('Type s<ENTER> to stop and p<ENTER> to pause.')
-    
-#    def pauseThread():
-#        while not state.done:
-#            state.cmd = raw_input().strip()
-            
-#    threading.Thread(target = pauseThread).start()
 
     if port.startswith('file:'):
         s = FakeSerial(port[5:])
@@ -66,8 +70,9 @@ def sendGcode(port, commands, speed=115200, quiet = False, gcodePause="@pause", 
         pass
         
     state = State()
-
+    state.relative = False
     state.lineNumber = 1
+
     s.write('\nM110 N1\n')
 
 ## TODO: flow control  
@@ -98,7 +103,7 @@ def sendGcode(port, commands, speed=115200, quiet = False, gcodePause="@pause", 
                         pass
         if c:
             ## assumes movement is always absolute
-            if re.match(r'[Gg][01]\s', c):
+            if not state.relative and re.match(r'[Gg][012]\s', c):
                 for part in re.split(r'\s+', c.upper()):
                     if re.match(r'X[-.0-9]', part):
                         variables['x'] = float(part[1:])
@@ -106,6 +111,11 @@ def sendGcode(port, commands, speed=115200, quiet = False, gcodePause="@pause", 
                         variables['y'] = float(part[1:])
                     elif re.match(r'Z[-.0-9]', part):
                         variables['z'] = float(part[1:])
+            elif re.match(r'[Gg]91\b', c):
+                state.relative = True
+                if 'x' in variables: del variables['x']
+                if 'y' in variables: del variables['y']
+                if 'z' in variables: del variables['z']
             elif re.match(r'[Gg]28\b', c):
                 if 'x' in variables: del variables['x']
                 if 'y' in variables: del variables['y']
@@ -200,21 +210,6 @@ Commands available:
                     print("Unknown command.")
         else:
             sendCommand(c)
-    """
-        time.sleep(0.1)
-        if state.cmd is not None:
-            if state.cmd == '':
-                print('Terminating.')
-                state.done = True
-                os._exit(0)
-            elif state.cmd == 'p':
-                print('Press enter to resume.')
-                state.cmd = None
-                while state.cmd is None:
-                    time.sleep(0.1)
-                print('Resuming.')
-            state.cmd = None
-    """            
     s.close()
     
 if __name__ == '__main__':
