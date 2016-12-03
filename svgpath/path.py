@@ -349,7 +349,7 @@ class Arc(Segment):
         return segment_length(self, 0, 1, start_point, end_point, error, min_depth, 0)
 
 class SVGState(object):
-    def __init__(self, fill=None, fillOpacity=None, fillRule=None, stroke=(0.,0.,0.), strokeOpacity=None, strokeWidth=0.1, strokeWidthScaling=True):
+    def __init__(self, fill=(0.,0.,0.), fillOpacity=None, fillRule='nonzero', stroke=None, strokeOpacity=None, strokeWidth=0.1, strokeWidthScaling=True):
         self.fill = fill
         self.fillOpacity = fillOpacity
         self.fillRule = fillRule
@@ -500,12 +500,12 @@ class Path(MutableSequence):
             if prevEnd is None or segment.point(0.) == prevEnd:
                 segments.append(segment)
             else:
-                paths.append(Path(*segments))
+                paths.append(Path(*segments, svgState=self.svgState))
                 segments = [segment]
             prevEnd = segment.point(1.)
                 
         if len(segments) > 0:
-            paths.append(Path(*segments))
+            paths.append(Path(*segments, svgState=self.svgState))
             
         return paths
         
@@ -540,7 +540,7 @@ class Path(MutableSequence):
         if len(subpath) > 0:
             subpaths.append(subpath)
             
-        linearPath = Path()
+        linearPath = Path(svgState=self.svgState)
         
         for i,subpath in enumerate(subpaths):
             keep = set((keepPointIndex,)) if i == keepSubpathIndex else set() 

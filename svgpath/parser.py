@@ -411,8 +411,8 @@ def getPathsFromSVG(svg,yGrowsUp=True):
             state.fillOpacity = float(arg)
         elif cmd == 'fill-rule':
             state.fillRule = arg
-            if state.fill is None:
-                state.fill = (0.,0.,0.)
+#            if state.fill is None:
+#                state.fill = (0.,0.,0.)
         elif cmd == 'stroke':
             state.stroke = rgbFromColor(arg)
         elif cmd == 'stroke-opacity':
