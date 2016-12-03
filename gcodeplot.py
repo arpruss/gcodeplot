@@ -276,7 +276,6 @@ def parseHPGL(hpgl,dpi=(1016.,1016.)):
     except:
         scale = (25.4/dpi, 25.4/dpi)
 
-    segments = []
     segment = []
     pen = 1
     data = {pen:[]}
@@ -286,14 +285,15 @@ def parseHPGL(hpgl,dpi=(1016.,1016.)):
             try:
                 coords = list(map(float, cmd[2:].split(',')))
                 for i in range(0,len(coords),2):
-                    data[pen].append((coords[i]*scale[0], coords[i+1]*scale[1]))
+                    segment.append((coords[i]*scale[0], coords[i+1]*scale[1]))
             except:
                 pass
                 # ignore no-movement PD/PU
         elif cmd.startswith('PU'):
             try:
+                if segment:
+                    data[pen].append(segment)
                 coords = list(map(float, cmd[2:].split(',')))
-                data[pen].append(segment)
                 segment = [(coords[-2]*scale[0], coords[-1]*scale[1])]
             except:
                 pass 
@@ -313,7 +313,7 @@ def parseHPGL(hpgl,dpi=(1016.,1016.)):
     if segment:
         data[pen].append(segment)
         
-    return {1:segments}
+    return data
     
 def emitHPGL(data, pens=None):
     def hpglCoordinates(offset,point):

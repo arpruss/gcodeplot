@@ -144,7 +144,6 @@ Commands available:
                 if '=' in cmd:
                     try:
                         var,value = re.split(r'\s*=\s*', cmd, maxsplit=2)
-                        print (var,value)
                         variables[var] = evaluate(value)
                     except:
                         print("Syntax error.")
