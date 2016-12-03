@@ -229,7 +229,6 @@ class QuadraticBezier(Segment):
         return s
 
 class Arc(Segment):
-
     def __init__(self, start, radius, rotation, arc, sweep, end):
         """radius is complex, rotation is in degrees,
            large and sweep are 1 or 0 (True/False also work)"""
@@ -350,15 +349,18 @@ class Arc(Segment):
         return segment_length(self, 0, 1, start_point, end_point, error, min_depth, 0)
 
 class SVGState(object):
-    def __init__(self, fill=None, fillOpacity=None, fillRule=None, stroke=(0.,0.,0.), strokeOpacity=None):
+    def __init__(self, fill=None, fillOpacity=None, fillRule=None, stroke=(0.,0.,0.), strokeOpacity=None, strokeWidth=0.1, strokeWidthScaling=True):
         self.fill = fill
         self.fillOpacity = fillOpacity
         self.fillRule = fillRule
         self.stroke = stroke
         self.strokeOpacity = strokeOpacity
+        self.strokeWidth = strokeWidth
+        self.strokeWidthScaling = False
                 
     def clone(self):
-        return SVGState(fill=self.fill, fillOpacity=self.fillOpacity, fillRule=self.fillRule, stroke=self.stroke, strokeOpacity=self.strokeOpacity)
+        return SVGState(fill=self.fill, fillOpacity=self.fillOpacity, fillRule=self.fillRule, stroke=self.stroke, strokeOpacity=self.strokeOpacity,
+                strokeWidth=self.strokeWidth, strokeWidthScaling=self.strokeWidthScaling)
         
 class Path(MutableSequence):
     """A Path is a sequence of path segments"""

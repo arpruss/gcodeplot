@@ -417,8 +417,13 @@ def getPathsFromSVG(svg,yGrowsUp=True):
             state.stroke = rgbFromColor(arg)
         elif cmd == 'stroke-opacity':
             state.strokeOpacity = rgbFromColor(arg)
+        elif cmd == 'stroke-width':
+            state.strokeWidth = float(arg)
+        elif cmd == 'vector-effect':
+            state.strokeWidthScaling = 'non-scaling-stroke' not in cmd
+            # todo better scaling for non-uniform cases?
     
-    def updateState(tree,state):
+    def updateState(tree,state,matrix):
         state = state.clone()
         try:
             style = re.sub(r'\s',r'', tree.attrib['style']).lower()
@@ -433,7 +438,12 @@ def getPathsFromSVG(svg,yGrowsUp=True):
                 updateStateCommand(state,item,tree.attrib[item])
             except:
                 pass
-            
+                
+        if state.strokeWidth and state.strokeWidthScaling:
+            # this won't work great for non-uniform scaling
+            h = abs(applyMatrix(matrix, Complex(0,state.strokeWidth)) - applyMatrix(matrix, 0j))
+            w = abs(applyMatrix(matrix, Complex(state.strokeWidth,0)) - applyMatrix(matrix, 0j))
+            state.strokeWidth = (h+w)/2
         return state
         
     def updateMatrix(tree, matrix):
@@ -484,9 +494,9 @@ def getPathsFromSVG(svg,yGrowsUp=True):
 
     def getPaths(paths, matrix, tree, state):
         tag = re.sub(r'.*}', '', tree.tag)
-        state = updateState(tree, state)
+        state = updateState(tree, state, matrix)
         if tag == 'path':
-            svgState = updateState(tree, state)
+            svgState = updateState(tree, state, matrix)
             path = parse_path(tree.attrib['d'], matrix=matrix, svgState=svgState)
             paths.append(path)
         elif tag == 'g' or tag == 'svg':
