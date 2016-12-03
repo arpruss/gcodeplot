@@ -240,7 +240,7 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
             if state.curXY is not None:
                 state.time += d / speed
             state.curXY = p
-
+            
     for pen in data:
         if pen is not 1:
             state.curZ = None
@@ -270,7 +270,7 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
 
     return gcode
     
-def parseHPGL(data,dpi=(1016.,1016.)):
+def parseHPGL(hpgl,dpi=(1016.,1016.)):
     try:
         scale = (25.4/dpi[0], 25.4/dpi[1])
     except:
@@ -281,9 +281,7 @@ def parseHPGL(data,dpi=(1016.,1016.)):
     pen = 1
     data = {pen:[]}
     
-    sys.stderr.write(str(scale)+"\n")
-
-    for cmd in re.sub(r'\s',r'',data).split(';'):
+    for cmd in re.sub(r'\s', r'', hpgl).split(';'):
         if cmd.startswith('PD'):
             try:
                 coords = list(map(float, cmd[2:].split(',')))

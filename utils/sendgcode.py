@@ -36,6 +36,11 @@ def sendGcode(port, commands, speed=115200, quiet = False, gcodePause="@pause", 
     If variables are used, all movement should be absolute before a pause.
     """
 
+    if sys.version_info[0] <= 2:
+        text_input = raw_input
+    else:
+        text_input = input
+    
     class State(object):
         pass
         
@@ -132,7 +137,7 @@ Commands available:
             showVariables()
                 
             while True:
-                cmdOriginalCase = raw_input("\nCOMMAND: ").strip()
+                cmdOriginalCase = text_input("\nCOMMAND: ").strip()
                 cmd = cmdOriginalCase.lower()
                 if len(cmd) == 0:
                     continue
