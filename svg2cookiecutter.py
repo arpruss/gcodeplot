@@ -22,9 +22,7 @@ module dummy() {}
 scale = size/$OVERALL_SIZE$;
 
 module ribbon(points, thickness=1, closed=false) {
-    p0 = closed ? concat(points, [points[0]]) : points;
-    
-    p = [for (i=[0:len(p0)-1]) scale*p0[i]] ;
+    p = closed ? concat(points, [points[0]]) : points;
     
     union() {
         for (i=[1:len(p)-1]) {
@@ -51,7 +49,7 @@ class Line(object):
     def toCode(self, pathCount):
         code = []
         path = 'path'+str(pathCount)
-        code.append( path + '=[' + ','.join(('[%.3f,%.3f]'%tuple(p) for p in self.points)) + '];' );
+        code.append( path + '=[' + ','.join(('scale*[%.3f,%.3f]'%tuple(p) for p in self.points)) + '];' );
         if not self.base:
             code.append('render(convexity=10) linear_extrude(height=('+self.height+')) ribbon('+path+',thickness='+self.width+');')
             if self.wall:
