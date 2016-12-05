@@ -49,7 +49,7 @@ class Line(object):
     def toCode(self, pathCount):
         code = []
         path = 'path'+str(pathCount)
-        code.append( path + '=[' + ','.join(('scale*[%.3f,%.3f]'%tuple(p) for p in self.points)) + '];' );
+        code.append( path + '=scale*[' + ','.join(('[%.3f,%.3f]'%tuple(p) for p in self.points)) + '];' );
         if not self.base:
             code.append('render(convexity=10) linear_extrude(height=('+self.height+')) ribbon('+path+',thickness='+self.width+');')
             if self.wall:
