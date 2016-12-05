@@ -356,7 +356,7 @@ class SVGState(object):
         self.stroke = stroke
         self.strokeOpacity = strokeOpacity
         self.strokeWidth = strokeWidth
-        self.strokeWidthScaling = False
+        self.strokeWidthScaling = strokeWidthScaling
                 
     def clone(self):
         return SVGState(fill=self.fill, fillOpacity=self.fillOpacity, fillRule=self.fillRule, stroke=self.stroke, strokeOpacity=self.strokeOpacity,

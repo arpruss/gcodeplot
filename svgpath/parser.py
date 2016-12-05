@@ -441,8 +441,8 @@ def getPathsFromSVG(svg,yGrowsUp=True):
                 
         if state.strokeWidth and state.strokeWidthScaling:
             # this won't work great for non-uniform scaling
-            h = abs(applyMatrix(matrix, Complex(0,state.strokeWidth)) - applyMatrix(matrix, 0j))
-            w = abs(applyMatrix(matrix, Complex(state.strokeWidth,0)) - applyMatrix(matrix, 0j))
+            h = abs(applyMatrix(matrix, complex(0,state.strokeWidth)) - applyMatrix(matrix, 0j))
+            w = abs(applyMatrix(matrix, complex(state.strokeWidth,0)) - applyMatrix(matrix, 0j))
             state.strokeWidth = (h+w)/2
         return state
         
