@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <_name>GcodePlot</_name>
+  <id>mobi.omegacentauri.gcodeplot</id>
+  <dependency type="extension">org.inkscape.output.svg.inkscape</dependency>
+  <dependency type="executable" location="extensions">gcodeplot.py</dependency>
+  <param name="tab" type="notebook">
+    <page name="plotter" _gui-text="Plotter Settings ">
+      <param name="tolerance" type="float" min="0.0001" max="10.0" precision="2" _gui-text="Precision (mm):" _gui-description="Set rendering precision (Default: 0.05)">0.05</param>
+      <param name="min-x" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Left x-coordinate (mm):" _gui-description="x-coordinate of the print area's left edge (Default: 0)">0</param>
+      <param name="min-y" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Lower y-coordinate (mm):" _gui-description="y-coordinate of the print area's lower edge (Default: 0)">0</param>
+      <param name="max-x" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Right x-coordinate (mm):" _gui-description="x-coordinate of the print area's right edge (Default: 200)">200</param>
+      <param name="max-y" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Upper y-coordinate (mm):" _gui-description="y-coordinate of the print area's upper edge (Default: 200)">200</param>
+      <param name="pen-up-z" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Pen up z-coordinate (mm):" _gui-description="z-coordinate of pen-up position (Default: 30)">30</param>
+      <param name="pen-down-z" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Pen down z-coordinate (mm):" _gui-description="z-coordinate of pen-down position (Default: 25)">25</param>
+      <param name="parking-z" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Parking z-coordinate (mm):" _gui-description="z-coordinate of park position (Default: 50)">50</param>
+      <param name="pen-up-speed" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Movement speed (mm/s):" _gui-description="Speed when moving with pen up (Default: 40)">40</param>
+      <param name="pen-down-speed" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Draw speed (mm/s):" _gui-description="Speed when moving with pen down (Default: 35)">35</param>
+      <param name="z-speed" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Z-speed (mm/s):" _gui-description="Speed when moving pen up/down (Default: 5)">5</param>
+      <param name="scale" type="enum" _gui-text="Scaling mode:" _gui-description="Method for scaling to print area (Default: none)">
+        <item value="none">none</item>
+        <item value="fit">fit</item>
+        <item value="down-only">down-only</item>
+      </param>
+    </page>
+  </param>
+  <output>
+    <extension>.gcode</extension>
+    <mimetype>text/plain</mimetype>
+    <_filetypename>3-axis gcode plotter (*.gcode)</_filetypename>
+    <_filetypetooltip>Export 3-axis gcode plotter file</_filetypetooltip>
+    <dataloss>true</dataloss>
+  </output>
+  <script>
+      <command reldir="extensions" interpreter="python">gcodeplot.py</command>
+  </script>
+</inkscape-extension>

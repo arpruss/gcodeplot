@@ -477,8 +477,8 @@ if __name__ == '__main__':
                         'input-dpi=', 'tolerance=', 'send=', 'send-speed=', 'pen-down-z=', 'pen-up-z=', 'parking-z=',
                         'pen-down-speed=', 'pen-up-speed=', 'z-speed=', 'hpgl-out', 'no-hpgl-out', 'shading-threshold=',
                         'shading-angle=', 'shading-crosshatch', 'no-shading-crosshatch', 'shading-avoid-outline', 
-                        'pause-at-start', 'no-pause-at-start',
-                        'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all', 'gcode-pause', 'dump-options'], )
+                        'pause-at-start', 'no-pause-at-start', 'min-x=', 'max-x=', 'min-y=', 'max-y=',
+                        'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all', 'gcode-pause', 'dump-options', 'tab='], )
 
         if len(args) + len(opts) == 0:
             raise getopt.GetoptError("invalid commandline")
@@ -541,6 +541,14 @@ if __name__ == '__main__':
                 v = list(map(float, arg.split(',')))
                 plotter.xyMin = (v[0],v[1])
                 plotter.xyMax = (v[2],v[3])
+            elif opt == '--min-x':
+                plotter.xyMin = (float(arg),plotter.xyMin[1])
+            elif opt == '--min-y':
+                plotter.xyMin = (plotter.xyMin[0],float(arg))
+            elif opt == '--max-x':
+                plotter.xyMax = (float(arg),plotter.xyMax[1])
+            elif opt == '--max-y':
+                plotter.xyMax = (plotter.xyMax[0],float(arg))
             elif opt in ('-D', '--input-dpi'):
                 v = list(map(float, arg.split(',')))
                 if len(v) > 1:
@@ -557,6 +565,8 @@ if __name__ == '__main__':
                 plotter.moveSpeed = float(arg)
             elif opt in ('-f', '--pen-down-speed'):
                 plotter.drawSpeed = float(arg)
+            elif opt in ('-u', '--z-speed'):
+                plotter.zSpeed = float(arg)
             elif opt in ('-H', '--hpgl-out'):
                 hpglOut = True
             elif opt == '--no-hpgl-out':
@@ -595,8 +605,10 @@ if __name__ == '__main__':
             elif opt in ('-h', '--help'):
                 help()
                 sys.exit(0)
-            elif opt in ('--dump-options'):
+            elif opt == '--dump-options':
                 doDump = True
+            elif opt == '--tab':
+                pass # Inkscape
             else:
                 raise ValueError("Unrecognized argument "+opt)
             i += 1
