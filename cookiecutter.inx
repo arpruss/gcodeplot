@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <_name>OpenSCAD Cookie Cutter Export</_name>
+  <id>mobi.omegacentauri.cookiecutter</id>
+  <dependency type="extension">org.inkscape.output.svg.inkscape</dependency>
+  <dependency type="executable" location="extensions">svg2cookiecutter.py</dependency>
+  <output>
+    <extension>.scad</extension>
+    <mimetype>text/plain</mimetype>
+    <_filetypename>OpenSCAD cookie cutter file (*.scad)</_filetypename>
+    <_filetypetooltip>Export an OpenSCAD cookie cutter file</_filetypetooltip>
+    <dataloss>true</dataloss>
+  </output>
+  <script>
+      <command reldir="extensions" interpreter="python">svg2cookiecutter.py</command>
+  </script>
+</inkscape-extension>
