@@ -5,7 +5,7 @@ import sys
 import getopt
 import math
 import xml.etree.ElementTree as ET
-import utils.anneal as anneal
+import gcodeplotutils.anneal as anneal
 import svgpath.parser as parser
 from svgpath.shader import Shader
 
@@ -685,7 +685,7 @@ if __name__ == '__main__':
         if sendPort is None:
             sys.stderr.write("Need to specify --send=port to be able to pause without any file.")
             sys.exit(1)
-        import utils.sendgcode as sendgcode
+        import gcodeplotutils.sendgcode as sendgcode
 
         sendgcode.sendGcode(port=sendPort, speed=115200, commands=GCODE_HEADER + [gcodePause], gcodePause=gcodePause, variables=variables)
         sys.exit(0)
@@ -733,7 +733,7 @@ if __name__ == '__main__':
 
     if g:
         if sendPort is not None:
-            import utils.sendgcode as sendgcode
+            import gcodeplotutils.sendgcode as sendgcode
             if hpglOut:
                 sendgcode.sendHPGL(port=sendPort, speed=115200, commands=g)
             else:
