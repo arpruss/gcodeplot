@@ -38,6 +38,11 @@ class Plotter(object):
             if point[i] < self.xyMin[i] or point[i] > self.xyMax[i]:
                 return False
         return True
+        
+def isSameColor(rgb1, rgb2):
+    if rgb1 is None or rgb2 is None:
+        return rgb1 is rgb2
+    return max(abs(rgb1[i]-rgb2[i]) for i in range(3)) < 0.001
 
 class Pen(object):
     def __init__(self, text):
@@ -356,12 +361,12 @@ def getPen(pens, color):
             
     return bestPen
 
-def parseSVG(svgTree, tolerance=0.05, shader=None, strokeAll=False, pens=None):
+def parseSVG(svgTree, tolerance=0.05, shader=None, strokeAll=False, pens=None, extractColor = None):
     data = {}
     for path in parser.getPathsFromSVG(svgTree)[0]:
         lines = []
         
-        stroke = strokeAll or path.svgState.stroke is not None
+        stroke = strokeAll or (path.svgState.stroke is not None and (extractColor is None or isSameColor(path.svgState.stroke, extractColor)))
         
         pen = getPen(pens, path.svgState.stroke)
 
@@ -373,7 +378,8 @@ def parseSVG(svgTree, tolerance=0.05, shader=None, strokeAll=False, pens=None):
                 data[pen].append([(line.start.real,line.start.imag),(line.end.real,line.end.imag)])
             lines.append((line.start, line.end))
 
-        if shader is not None and shader.isActive() and path.svgState.fill is not None:
+        if shader is not None and shader.isActive() and path.svgState.fill is not None and (extractColor is None or
+                isSameColor(path.svgStatefill, extractColor)):
             pen = getPen(pens, path.svgState.fill)
             
             if pen not in data:
@@ -415,6 +421,7 @@ if __name__ == '__main__':
     def help():
         sys.stdout.write("gcodeplot.py [options] [inputfile [> output.gcode]\n")
         sys.stdout.write("""
+    --dump-options: show current settings instead of doing anything
  -h|--help: this
  -r|--allow-repeats*: do not deduplicate paths
  -f|--scale=mode: scaling option: none(n), fit(f), down-only(d) [default none]
@@ -446,6 +453,7 @@ if __name__ == '__main__':
  -w|--gcode-pause=cmd: gcode pause command [default: @pause]
  -P|--pens=penfile: read output pens from penfile
  -U|--pause-at-start*: pause at start (can be included without any input file to manually move stuff)
+ -R|--extract-color=c: extract color (specified in SVG format , e.g., rgb(1,0,0) or #ff0000 or red)
  
  The options with an asterisk are default off and can be turned off again by adding "no-" at the beginning to the long-form option, e.g., --no-stroke-all or --no-send.
 """)
@@ -462,6 +470,7 @@ if __name__ == '__main__':
     plotter = Plotter()
     hpglOut = False
     strokeAll = False
+    extractColor = None
     gcodePause = "@pause"
     optimizationTimeOut = 30
     dpi = (1016., 1016.)
@@ -471,14 +480,14 @@ if __name__ == '__main__':
     pauseAtStart = False
     
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "Uhdulw:P:o:Oc:LT:M:m:A:XHrf:dna:D:t:s:S:x:y:z:Z:p:f:F:", 
+        opts, args = getopt.getopt(sys.argv[1:], "R:Uhdulw:P:o:Oc:LT:M:m:A:XHrf:dna:D:t:s:S:x:y:z:Z:p:f:F:", 
                         ["help", "down", "up", "lower-left", "allow-repeats", "no-allow-repeats", "scale=", "config-file=",
                         "area=", 'align-x=', 'align-y=', 'optimize-timeout=', "pens=",
                         'input-dpi=', 'tolerance=', 'send=', 'send-speed=', 'pen-down-z=', 'pen-up-z=', 'parking-z=',
                         'pen-down-speed=', 'pen-up-speed=', 'z-speed=', 'hpgl-out', 'no-hpgl-out', 'shading-threshold=',
                         'shading-angle=', 'shading-crosshatch', 'no-shading-crosshatch', 'shading-avoid-outline', 
                         'pause-at-start', 'no-pause-at-start', 'min-x=', 'max-x=', 'min-y=', 'max-y=',
-                        'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all', 'gcode-pause', 'dump-options', 'tab='], )
+                        'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all', 'gcode-pause', 'dump-options', 'tab=', 'extract-color='], )
 
         if len(args) + len(opts) == 0:
             raise getopt.GetoptError("invalid commandline")
@@ -501,6 +510,7 @@ if __name__ == '__main__':
                             p = Pen(line)
                             pens[p.pen] = p                            
             elif opt in ('-f', '--scale'):
+                arg = arg.lower()
                 if arg.startswith('n'):
                     scalingMode = SCALE_NONE
                 elif arg.startswith('d'):
@@ -508,6 +518,7 @@ if __name__ == '__main__':
                 elif arg.startswith('f'):
                     scalingMode = SCALE_FIT
             elif opt in ('-x', '--align-x'):
+                arg = arg.lower()
                 if arg.startswith('l'):
                     align[0] = ALIGN_LEFT
                 elif arg.startswith('r'):
@@ -519,6 +530,7 @@ if __name__ == '__main__':
                 else:
                     raise ValueError()
             elif opt in ('-y', '--align-y'):
+                arg = arg.lower()
                 if arg.startswith('b'):
                     align[1] = ALIGN_LEFT
                 elif arg.startswith('t'):
@@ -607,6 +619,12 @@ if __name__ == '__main__':
                 sys.exit(0)
             elif opt == '--dump-options':
                 doDump = True
+            elif opt in ('R', '--extract-color'):
+                arg = arg.lower()
+                if arg == 'all':
+                    extractColor = None
+                else:
+                    extractColor = parser.rgbFromColor(arg)
             elif opt == '--tab':
                 pass # Inkscape
             else:
@@ -672,6 +690,7 @@ if __name__ == '__main__':
         print('stroke-all' if strokeAll else 'no-stroke-all')
         print('optimization-timeout=%g' % (optimizationTimeOut))
         print('pause-at-start' if pauseAtStart else 'no-pause-at-start')
+        print('extract-color=all' if extractColor is None else 'extract-color=rgb(%.3f,%.3f,%.3f)' % tuple(extractColor))
         
         sys.exit(0)
         
@@ -707,7 +726,7 @@ if __name__ == '__main__':
         exit(1)
         
     if svgTree is not None:
-        penData = parseSVG(svgTree, tolerance=tolerance, shader=shader, strokeAll=strokeAll, pens=pens)
+        penData = parseSVG(svgTree, tolerance=tolerance, shader=shader, strokeAll=strokeAll, pens=pens, extractColor=extractColor)
     else:
         penData = parseHPGL(data, dpi=dpi)
     penData = removePenBob(penData)
