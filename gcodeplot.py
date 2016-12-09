@@ -23,14 +23,14 @@ GCODE_HEADER = ['G90; absolute', 'G0 S1 E0', 'G1 S1 E0', 'G21; millimeters', 'G2
 
 class Plotter(object):
     def __init__(self, xyMin=(10,8), xyMax=(192,150), 
-            drawSpeed=35, moveSpeed=40, zSpeed=5, penDownZ = 14.5, penUpZ = 17, safeUpZ = 40):
+            drawSpeed=35, moveSpeed=40, zSpeed=5, workZ = 14.5, liftDeltaZ = 2.5, safeDeltaZ = 20):
         self.xyMin = xyMin
         self.xyMax = xyMax
         self.drawSpeed = drawSpeed
         self.moveSpeed = moveSpeed
-        self.penDownZ = penDownZ
-        self.penUpZ = penUpZ
-        self.safeUpZ = safeUpZ
+        self.workZ = workZ
+        self.liftDeltaZ = liftDeltaZ
+        self.safeDeltaZ = safeDeltaZ
         self.zSpeed = zSpeed
         
     def inRange(self, point):
@@ -38,6 +38,14 @@ class Plotter(object):
             if point[i] < self.xyMin[i] or point[i] > self.xyMax[i]:
                 return False
         return True
+        
+    @property
+    def safeUpZ(self):
+        return self.workZ + self.safeDeltaZ
+        
+    @property
+    def penUpZ(self):
+        return self.workZ + self.liftDeltaZ
         
 def isSameColor(rgb1, rgb2):
     if rgb1 is None or rgb2 is None:
@@ -226,10 +234,10 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
             state.curZ = plotter.penUpZ
         
     def penDown():
-        if state.curZ is None or state.curZ != plotter.penDownZ:
-            gcode.append('G0 F%.1f Z%.3f; pen down !!Zdown' % (plotter.zSpeed*60., plotter.penDownZ))
-            state.time += abs(state.curZ-plotter.penDownZ) / plotter.zSpeed
-            state.curZ = plotter.penDownZ
+        if state.curZ is None or state.curZ != plotter.workZ:
+            gcode.append('G0 F%.1f Z%.3f; pen down !!Zwork' % (plotter.zSpeed*60., plotter.workZ))
+            state.time += abs(state.curZ-plotter.workZ) / plotter.zSpeed
+            state.curZ = plotter.workZ
 
     def penMove(down, speed, p):
         if state.curXY is None:
@@ -567,12 +575,12 @@ if __name__ == '__main__':
                     dpi = v[0:2]
                 else:
                     dpi = (v[0],v[0])
-            elif opt in ('-Z', '--pen-up-z'):
-                plotter.penUpZ = float(arg)
-            elif opt in ('-z', '--pen-down-z'):
-                plotter.penDownZ = float(arg)
-            elif opt in ('-p', '--parking-z'):
-                plotter.safeUpZ = float(arg)
+            elif opt in ('-Z', '--lift-delta-z'):
+                plotter.liftDeltaZ = float(arg)
+            elif opt in ('-z', '--work-z'):
+                plotter.workZ = float(arg)
+            elif opt in ('-p', '--safe-delta-z'):
+                plotter.safeDeltaZ = float(arg)
             elif opt in ('-F', '--pen-up-speed'):
                 plotter.moveSpeed = float(arg)
             elif opt in ('-f', '--pen-down-speed'):
@@ -678,8 +686,9 @@ if __name__ == '__main__':
         print('send-speed=' + str(sendSpeed))
         print('area=%g,%g,%g,%g' % tuple(list(plotter.xyMin)+list(plotter.xyMax)))
         print('input-dpi=%g,%g' % tuple(dpi))
-        print('pen-up-z=%g' % (plotter.penUpZ))
-        print('pen-down-z=%g' % (plotter.penDownZ))
+        print('safe-delta-z=%g' % (plotter.safeDeltaZ))
+        print('lift-delta-z=%g' % (plotter.liftDeltaZ))
+        print('work-z=%g' % (plotter.workZ))
         print('parking-z=%g' % (plotter.safeUpZ))
         print('hpgl-out' if hpglOut else 'no-hpgl-out')        
         print('shading-threshold=%g' % (shader.unshadedThreshold))
@@ -694,8 +703,9 @@ if __name__ == '__main__':
         
         sys.exit(0)
         
-    variables = {'up':plotter.penUpZ, 'down':plotter.penDownZ, 'park':plotter.safeUpZ, 'left':plotter.xyMin[0],
+    variables = {'lift':plotter.liftDeltaZ, 'work':plotter.workZ, 'safe':plotter.safeDeltaZ, 'left':plotter.xyMin[0],
         'bottom':plotter.xyMin[1], 'right':plotter.xyMax[0], 'top':plotter.xyMax[1]}
+    formulas = {'up':'work+lift', 'park':'work+safe', 'centerx':'(left+right)/2.', 'centery':'(top+bottom)/2.'}
         
     if len(args) == 0:
         if not pauseAtStart:
@@ -706,7 +716,7 @@ if __name__ == '__main__':
             sys.exit(1)
         import gcodeplotutils.sendgcode as sendgcode
 
-        sendgcode.sendGcode(port=sendPort, speed=115200, commands=GCODE_HEADER + [gcodePause], gcodePause=gcodePause, variables=variables)
+        sendgcode.sendGcode(port=sendPort, speed=115200, commands=GCODE_HEADER + [gcodePause], gcodePause=gcodePause, variables=variables, formulas=formulas)
         sys.exit(0)
 
     with open(args[0]) as f:
@@ -756,7 +766,7 @@ if __name__ == '__main__':
             if hpglOut:
                 sendgcode.sendHPGL(port=sendPort, speed=115200, commands=g)
             else:
-                sendgcode.sendGcode(port=sendPort, speed=115200, commands=g, gcodePause=gcodePause, plotter=plotter, variables=variables)
+                sendgcode.sendGcode(port=sendPort, speed=115200, commands=g, gcodePause=gcodePause, plotter=plotter, variables=variables, formulas=formulas)
         else:    
             if hpglOut:
                 sys.stdout.write(g)

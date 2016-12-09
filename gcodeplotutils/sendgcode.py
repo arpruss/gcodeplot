@@ -4,7 +4,6 @@ import time
 import os
 import re
 import sys
-from ast import literal_eval
 
 class FakeSerial(object):
     def __init__(self, name):
@@ -24,19 +23,25 @@ class FakeSerial(object):
     def close(self):
         if self.handle is not sys.stdout:
             self.handle.close()
+            
+SAFE_EVAL_RE = re.compile(r'^[-+/*()eE0-9.]+$')
 
+def safeEval(string):
+    if not SAFE_EVAL_RE.match(string):
+        raise ValueError()
+    return eval(string)
+            
 def sendHPGL(port, commands):
     s = serial.Serial(port, 115200)
     s.flushInput()
     s.write(commands)
     s.close()
 
-def sendGcode(port, commands, speed=115200, quiet = False, gcodePause="@pause", plotter=None, variables={}):
+def sendGcode(port, commands, speed=115200, quiet = False, gcodePause="@pause", plotter=None, variables={}, formulas={}):
     """
     If variables are used, all movement should be absolute before a pause.
+    Formulas cannot reference other formulas, but must be defined directly in terms of the variables.
     """
-<<<<<<< .mine
-||||||| .r73
 
     class State(object):
         pass
@@ -44,22 +49,12 @@ def sendGcode(port, commands, speed=115200, quiet = False, gcodePause="@pause", 
     state = State()
     state.cmd = None
     state.done = False
-=======
 
     if sys.version_info[0] <= 2:
         text_input = raw_input
     else:
         text_input = input
     
-    class State(object):
-        pass
-        
-    state = State()
-    state.cmd = None
-    state.done = False
->>>>>>> .r78
-    
-
     if port.startswith('file:'):
         s = FakeSerial(port[5:])
     else:
@@ -79,9 +74,11 @@ def sendGcode(port, commands, speed=115200, quiet = False, gcodePause="@pause", 
     state.lineNumber = 2
     
     def evaluate(value):
+        for x in formulas:
+            value  = re.sub(r'\b' + x + r'\b', '('+formulas[x]+')', value)
         for x in variables:
-            value = re.sub(r'\b' + x + r'\b', '%.3f' % variables[x], value)
-        return literal_eval(value)
+            value = re.sub(r'\b' + x + r'\b', repr(variables[x]), value)
+        return safeEval(value)
 
     def sendCommand(c):
         def checksum(text):
@@ -141,8 +138,11 @@ Commands available:
                 
             def showVariables():
                 if variables:
-                    print("\nCurrent values:")
-                    print('\t'.join(("%s=%.3g" % (var, variables[var]) for var in sorted(variables))))
+                    print("\nCurrent variables:")
+                    print('\t'.join(("%s=%.5g" % (var, variables[var]) for var in sorted(variables))))
+                if formulas:
+                    print("\nCurrent formulas:")
+                    print('\t'.join(("%s=%s=%.5g" % (var, formulas[var], evaluate(formulas[var])) for var in sorted(formulas))))
                 
             showVariables()
                 
