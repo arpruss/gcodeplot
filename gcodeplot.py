@@ -7,6 +7,8 @@ import math
 import xml.etree.ElementTree as ET
 import gcodeplotutils.anneal as anneal
 import svgpath.parser as parser
+import cmath
+from random import sample
 from svgpath.shader import Shader
 
 SCALE_NONE = 0
@@ -107,6 +109,110 @@ class Scale(object):
         
     def scalePoint(self, point):
         return (point[0]*self.scale[0]+self.offset[0], point[1]*self.scale[1]+self.offset[1])
+        
+def safeSorted(data,comparison=cmp):
+    """
+    A simpleminded recursive merge sort that will work even if the comparison function fails to be a partial order.
+    Makes (shallow) copies of the data, which uses more memory than is absolutely necessary. In the intended application,
+    the comparison function is very expensive but the number of data points is small.
+    """
+    n = len(data)
+    if n <= 1:
+        return list(data)
+    d1 = safeSorted(data[:n//2])
+    d2 = safeSorted(data[n//2:])
+    i1 = 0
+    i2 = 0
+    out = []
+    while i1 < len(d1) and i2 < len(d2):
+        if comparison(d1[i1], d2[i2]) < 0:
+            out.append(d1[i1])
+            i1 += 1
+        else:
+            out.append(d2[i2])
+            i2 += 1
+    if i1 < len(d1):
+        out += d1[i1:]
+    elif i2 < len(d2):
+        out += d2[i2:]
+    return out
+        
+def comparePaths(path1,path2,tolerance=0.05,pointsToCheck=3):
+    """
+    inner paths come before outer ones
+    closed paths come before open ones
+    otherwise, average left to right movement
+    """
+    
+    def fixPath(path):
+        out = [complex(point[0],point[1]) for point in path]
+        if out[0] != out[-1] and abs(out[0]-out[-1]) <= tolerance:
+            out.append(out[0]) 
+        return out
+        
+    def closed(path):
+        return out[-1] == out[0]
+        
+    def inside(z, path):
+        for p in path:
+            if p == z:
+                return False
+        try:
+            phases = sorted((cmath.phase(p.phase-z) for p in path))
+            # make a ray that is relatively far away from any points
+            if len(phases) == 1:
+                # should not happen
+                bestPhase = phases[0] + math.pi
+            else:    
+                bestIndex = max( (phases[i+1]-phases[i],i) for i in range(len(phases)-1))
+                bestPhase = (phases[bestIndex+1]+phases[bestIndex])/2.
+            ray = cmath.rect(1., bestPhase)
+            shiftedPath = tuple((p-z) / ray for p in path)
+            # now we just need to check shiftedPath's intersection with the positive real line
+            s = 0
+            for i,p2 in enumerate(rotatedPath):
+                p1 = rotatedPath[i-1]
+                if p1.imag == p2.imag:
+                    # horizontal lines can't intersect positive real line once phase selection was done
+                    continue
+                    # (1/m)y + xIntercept = x
+                reciprocalSlope = (p2.real-p1.real)/(p1.imag-p1.imag)
+                xIntercept = p2.real - reciprocalSlope * p2.imag
+                if xIntercept == 0:
+                    return False # on boundary
+                if xIntercept > 0:
+                    if p1.imag < p2.imag:
+                        s += 1
+                    else:
+                        s -= 1
+            return s != 0
+                
+        except OverflowError:
+            return False
+        
+    def nestedPaths(path1, path2):
+        if not closed(path2):
+            return False
+        k = min(pointsToCheck, len(path1))
+        for point in sample(path1, k):
+            if inside(point, path2):
+                return True
+        return False
+        
+    path1 = fixPath(path)
+    path2 = fixPath(path)
+    
+    if nestedPaths(path1, path2):
+        return -1
+    elif nestedPaths(path2, path1):
+        return 1
+    elif closed(path1) and not closed(path2):
+        return -1
+    elif closed(path2) and not closed(path1):
+        return 1
+    x1 = sum(p.real for p in path1) / len(path1)
+    x2 = sum(p.real for p in path2) / len(path2)
+    return cmp(x1,x2)
 
 def removePenBob(data):
     """
@@ -174,7 +280,7 @@ def describePen(pens, pen):
     else:
         return str(pen)
     
-def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align = None, tolerance = 0, gcodePause="@pause", pauseAtStart = False):
+def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align = None, tolerance=0, gcodePause="@pause", pauseAtStart = False):
     xyMin = [float("inf"),float("inf")]
     xyMax = [float("-inf"),float("-inf")]
     
@@ -457,6 +563,7 @@ if __name__ == '__main__':
  -L|--stroke-all*: stroke even regions specified by SVG to have no stroke
  -O|--shading-avoid-outline*: avoid going over outline twice when shading
  -o|--optimize-timeout=t: timeout on optimization attempt (seconds; will be retried once; set to 0 to turn off optimization) [default 30]
+ -d|--sort*: sort paths from inside to outside for cutting [default off]
  -c|--config-file=filename: read arguments, one per line, from filename
  -w|--gcode-pause=cmd: gcode pause command [default: @pause]
  -P|--pens=penfile: read output pens from penfile
@@ -486,16 +593,17 @@ if __name__ == '__main__':
     doDump = False
     penFilename = None
     pauseAtStart = False
+    sort = False
     
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "R:Uhdulw:P:o:Oc:LT:M:m:A:XHrf:dna:D:t:s:S:x:y:z:Z:p:f:F:", 
+        opts, args = getopt.getopt(sys.argv[1:], "R:Uhdulw:P:o:Oc:LT:M:m:A:XHrf:na:D:t:s:S:x:y:z:Z:p:f:F:", 
                         ["help", "down", "up", "lower-left", "allow-repeats", "no-allow-repeats", "scale=", "config-file=",
                         "area=", 'align-x=', 'align-y=', 'optimize-timeout=', "pens=",
                         'input-dpi=', 'tolerance=', 'send=', 'send-speed=', 'pen-down-z=', 'pen-up-z=', 'parking-z=',
                         'pen-down-speed=', 'pen-up-speed=', 'z-speed=', 'hpgl-out', 'no-hpgl-out', 'shading-threshold=',
                         'shading-angle=', 'shading-crosshatch', 'no-shading-crosshatch', 'shading-avoid-outline', 
                         'pause-at-start', 'no-pause-at-start', 'min-x=', 'max-x=', 'min-y=', 'max-y=',
-                        'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all', 'gcode-pause', 'dump-options', 'tab=', 'extract-color='], )
+                        'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all', 'gcode-pause', 'dump-options', 'tab=', 'extract-color=', 'sort', 'no-sort'], )
 
         if len(args) + len(opts) == 0:
             raise getopt.GetoptError("invalid commandline")
@@ -622,6 +730,8 @@ if __name__ == '__main__':
                 opts = opts[:i+1] + configOpts + opts[i+1:]
             elif opt in ('-o', '--optimization-timeout'):
                 optimizationTimeOut = float(arg)
+                if optimizationTimeOut > 0:
+                    sort = False
             elif opt in ('-h', '--help'):
                 help()
                 sys.exit(0)
@@ -633,6 +743,11 @@ if __name__ == '__main__':
                     extractColor = None
                 else:
                     extractColor = parser.rgbFromColor(arg)
+            elif opt in ('d', '--sort'):
+                sortPaths = True
+                optimizationTimeOut = 0
+            elif opt == '--no-sort':
+                sortPaths = False
             elif opt == '--tab':
                 pass # Inkscape
             else:
@@ -698,6 +813,7 @@ if __name__ == '__main__':
         print('shading-crosshatch' if shader.crossHatch else 'no-shading-crosshatch')
         print('stroke-all' if strokeAll else 'no-stroke-all')
         print('optimization-timeout=%g' % (optimizationTimeOut))
+        print('sort' if sort else 'no-sort')
         print('pause-at-start' if pauseAtStart else 'no-pause-at-start')
         print('extract-color=all' if extractColor is None else 'extract-color=rgb(%.3f,%.3f,%.3f)' % tuple(extractColor))
         
@@ -747,6 +863,11 @@ if __name__ == '__main__':
     if optimizationTimeOut > 0.:
         for pen in penData:
             penData[pen] = anneal.optimize(penData[pen], timeout=optimizationTimeOut)
+        penData = removePenBob(penData)
+        
+    if sortPaths:
+        for pen in penData:
+            penData[pen] = safeSorted(penData[pen], comparison=comparePaths)
         penData = removePenBob(penData)
         
     if len(penData) > 1:
