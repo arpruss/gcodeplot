@@ -151,23 +151,23 @@ def comparePaths(path1,path2,tolerance=0.05,pointsToCheck=3):
         return out
         
     def closed(path):
-        return out[-1] == out[0]
+        return path[-1] == path[0]
         
     def inside(z, path):
         for p in path:
             if p == z:
                 return False
         try:
-            phases = sorted((cmath.phase(p.phase-z) for p in path))
+            phases = sorted((cmath.phase(p-z) for p in path))
             # make a ray that is relatively far away from any points
             if len(phases) == 1:
                 # should not happen
                 bestPhase = phases[0] + math.pi
             else:    
-                bestIndex = max( (phases[i+1]-phases[i],i) for i in range(len(phases)-1))
+                bestIndex = max( (phases[i+1]-phases[i],i) for i in range(len(phases)-1))[1]
                 bestPhase = (phases[bestIndex+1]+phases[bestIndex])/2.
             ray = cmath.rect(1., bestPhase)
-            shiftedPath = tuple((p-z) / ray for p in path)
+            rotatedPath = tuple((p-z) / ray for p in path)
             # now we just need to check shiftedPath's intersection with the positive real line
             s = 0
             for i,p2 in enumerate(rotatedPath):
@@ -176,7 +176,7 @@ def comparePaths(path1,path2,tolerance=0.05,pointsToCheck=3):
                     # horizontal lines can't intersect positive real line once phase selection was done
                     continue
                     # (1/m)y + xIntercept = x
-                reciprocalSlope = (p2.real-p1.real)/(p1.imag-p1.imag)
+                reciprocalSlope = (p2.real-p1.real)/(p2.imag-p1.imag)
                 xIntercept = p2.real - reciprocalSlope * p2.imag
                 if xIntercept == 0:
                     return False # on boundary
@@ -199,8 +199,8 @@ def comparePaths(path1,path2,tolerance=0.05,pointsToCheck=3):
                 return True
         return False
         
-    path1 = fixPath(path)
-    path2 = fixPath(path)
+    path1 = fixPath(path1)
+    path2 = fixPath(path2)
     
     if nestedPaths(path1, path2):
         return -1
@@ -279,8 +279,14 @@ def describePen(pens, pen):
         return pens[pen].description
     else:
         return str(pen)
-    
-def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align = None, tolerance=0, gcodePause="@pause", pauseAtStart = False):
+        
+def penColor(pens, pen):
+    if pens is not None and pen in pens:
+        return pens[pen].color
+    else:
+        return (0.,0.,0.)
+        
+def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align = None, tolerance=0, gcodePause="@pause", pauseAtStart = False, simulation = False):
     xyMin = [float("inf"),float("inf")]
     xyMax = [float("-inf"),float("-inf")]
     
@@ -312,14 +318,22 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
     if align is not None:
         scale.align(plotter, xyMin, xyMax, align)
         
-    gcode = GCODE_HEADER[:]
-    
+    if not simulation:
+        gcode = GCODE_HEADER[:]
+    else:
+        gcode = []
+        gcode.append('<?xml version="1.0" standalone="yes"?>')
+        gcode.append('<svg width="%.4fmm" height="%.4fmm" viewBox="%.4f %.4f %.4f %.4f" xmlns="http://www.w3.org/2000/svg" version="1.1">' % ( 
+            plotter.xyMax[0]-plotter.xyMin[0], plotter.xyMax[1]-plotter.xyMin[0], plotter.xyMin[0], plotter.xyMin[1], plotter.xyMax[0], plotter.xyMax[1]))
+        
     def park():
-        gcode.append('G1 F%.1f Z%.3f; pen park !!Zpark' % (plotter.zSpeed*60., plotter.safeUpZ))
+        if not simulation:
+            gcode.append('G1 F%.1f Z%.3f; pen park !!Zpark' % (plotter.zSpeed*60., plotter.safeUpZ))
 
     park()
-    gcode.append('G1 F%.1f Y%.3f' % (plotter.moveSpeed*60.,plotter.xyMin[1]))
-    gcode.append('G1 F%.1f X%.3f' % (plotter.moveSpeed*60.,plotter.xyMin[0]))
+    if not simulation:
+        gcode.append('G1 F%.1f Y%.3f' % (plotter.moveSpeed*60.,plotter.xyMin[1]))
+        gcode.append('G1 F%.1f X%.3f' % (plotter.moveSpeed*60.,plotter.xyMin[0]))
     
     class State(object):
         pass
@@ -328,24 +342,29 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
     state.time = (plotter.xyMin[1]+plotter.xyMin[0]) / plotter.moveSpeed
     state.curXY = plotter.xyMin
     state.curZ = plotter.safeUpZ
+    state.penColor = (0.,0.,0.)
     
     def distance(a,b):
         return math.hypot(a[0]-b[0],a[1]-b[1])
     
     def penUp():
         if state.curZ is None or state.curZ < plotter.penUpZ:
-            gcode.append('G0 F%.1f Z%.3f; pen up !!Zup' % (plotter.zSpeed*60., plotter.penUpZ))
+            if not simulation:
+                gcode.append('G0 F%.1f Z%.3f; pen up !!Zup' % (plotter.zSpeed*60., plotter.penUpZ))
             if state.curZ is not None:
                 state.time += abs(plotter.penUpZ-state.curZ) / plotter.zSpeed
             state.curZ = plotter.penUpZ
         
     def penDown():
         if state.curZ is None or state.curZ != plotter.workZ:
-            gcode.append('G0 F%.1f Z%.3f; pen down !!Zwork' % (plotter.zSpeed*60., plotter.workZ))
+            if not simulation:
+                gcode.append('G0 F%.1f Z%.3f; pen down !!Zwork' % (plotter.zSpeed*60., plotter.workZ))
             state.time += abs(state.curZ-plotter.workZ) / plotter.zSpeed
             state.curZ = plotter.workZ
 
     def penMove(down, speed, p):
+        def flip(y):
+            return plotter.xyMax[1] - (y-plotter.xyMin[1])
         if state.curXY is None:
             d = float("inf")
         else:
@@ -355,15 +374,33 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
                 penDown()
             else:
                 penUp()
-            gcode.append('G1 F%.1f X%.3f Y%.3f; %s' % (speed*60., p[0], p[1], "draw" if down else "move"))
+            if not simulation:
+                gcode.append('G1 F%.1f X%.3f Y%.3f; %s' % (speed*60., p[0], p[1], "draw" if down else "move"))
+            else:
+                start = state.curXY if state.curXY is not None else plotter.xyMin
+                color = [int(math.floor(255*x+0.5)) for x in (state.penColor if down else (0,0.5,0))]
+                thickness = 0.15 if down else 0.1
+                end = complex(p[0], flip(p[1]))
+                gcode.append('<line x1="%.3f" y1="%.3f" x2="%.3f" y2="%.3f" stroke="rgb(%d,%d,%d)" stroke-width="%.2f"/>' 
+                    % (start[0], flip(start[1]), end.real, end.imag, color[0], color[1], color[2], thickness))
+                ray = end - complex(start[0],flip(start[1]))
+                if abs(ray)>0:
+                    ray = ray/abs(ray)
+                    for theta in [math.pi * 0.8,-math.pi * 0.8]:
+                        head = end + ray * cmath.rect(max(0.3,min(2,d*0.25)), theta)
+                        gcode.append('<line x1="%.3f" y1="%.3f" x2="%.3f" y2="%.3f" stroke="rgb(0,128,0)" stroke-linejoin="round" stroke-width="0.1"/>' 
+                            % (end.real, end.imag, head.real, head.imag))
+                
             if state.curXY is not None:
                 state.time += d / speed
             state.curXY = p
             
-    for pen in data:
+    for pen in sorted(data):
         if pen is not 1:
             state.curZ = None
             state.curXY = None
+            
+        state.penColor = penColor(pens, pen)
             
         s = scale.clone()
 
@@ -375,7 +412,7 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
         for segment in data[pen]:
             penMove(False, plotter.moveSpeed, s.scalePoint(segment[0]))
             
-            if newPen and (pen != 1 or pauseAtStart):
+            if newPen and (pen != 1 or pauseAtStart) and not simulation:
                 gcode.append( gcodePause+' load pen: ' + describePen(pens,pen) )
             newPen = False
             
@@ -386,6 +423,9 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
     
     sys.stderr.write('Estimated printing time: %dm %.1fs\n' % (state.time // 60, state.time % 60))
     sys.stderr.flush()
+    
+    if simulation:
+        gcode.append('</svg>')
 
     return gcode
     
@@ -593,17 +633,18 @@ if __name__ == '__main__':
     doDump = False
     penFilename = None
     pauseAtStart = False
-    sort = False
+    sortPaths = False
+    svgSimulation = False
     
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "R:Uhdulw:P:o:Oc:LT:M:m:A:XHrf:na:D:t:s:S:x:y:z:Z:p:f:F:", 
+        opts, args = getopt.getopt(sys.argv[1:], "UR:Uhdulw:P:o:Oc:LT:M:m:A:XHrf:na:D:t:s:S:x:y:z:Z:p:f:F:", 
                         ["help", "down", "up", "lower-left", "allow-repeats", "no-allow-repeats", "scale=", "config-file=",
                         "area=", 'align-x=', 'align-y=', 'optimize-timeout=', "pens=",
                         'input-dpi=', 'tolerance=', 'send=', 'send-speed=', 'pen-down-z=', 'pen-up-z=', 'parking-z=',
                         'pen-down-speed=', 'pen-up-speed=', 'z-speed=', 'hpgl-out', 'no-hpgl-out', 'shading-threshold=',
                         'shading-angle=', 'shading-crosshatch', 'no-shading-crosshatch', 'shading-avoid-outline', 
                         'pause-at-start', 'no-pause-at-start', 'min-x=', 'max-x=', 'min-y=', 'max-y=',
-                        'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all', 'gcode-pause', 'dump-options', 'tab=', 'extract-color=', 'sort', 'no-sort'], )
+                        'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all', 'gcode-pause', 'dump-options', 'tab=', 'extract-color=', 'sort', 'no-sort', 'simulation', 'no-simulation'], )
 
         if len(args) + len(opts) == 0:
             raise getopt.GetoptError("invalid commandline")
@@ -728,7 +769,7 @@ if __name__ == '__main__':
             elif opt in ('-c', '--config-file'):
                 configOpts = getConfigOpts(arg)
                 opts = opts[:i+1] + configOpts + opts[i+1:]
-            elif opt in ('-o', '--optimization-timeout'):
+            elif opt in ('-o', '--optimize-timeout'):
                 optimizationTimeOut = float(arg)
                 if optimizationTimeOut > 0:
                     sort = False
@@ -748,6 +789,10 @@ if __name__ == '__main__':
                 optimizationTimeOut = 0
             elif opt == '--no-sort':
                 sortPaths = False
+            elif opt in ('U', '--simulation'):
+                svgSimulation = True
+            elif opt == '--no-simulation':
+                svgSimulation = False
             elif opt == '--tab':
                 pass # Inkscape
             else:
@@ -816,6 +861,7 @@ if __name__ == '__main__':
         print('sort' if sort else 'no-sort')
         print('pause-at-start' if pauseAtStart else 'no-pause-at-start')
         print('extract-color=all' if extractColor is None else 'extract-color=rgb(%.3f,%.3f,%.3f)' % tuple(extractColor))
+        print('simulation' if svgSimulation else 'no-simulation')
         
         sys.exit(0)
         
@@ -872,17 +918,17 @@ if __name__ == '__main__':
         
     if len(penData) > 1:
         sys.stderr.write("Uses the following pens:\n")
-        for pen in penData:
+        for pen in sorted(penData):
             sys.stderr.write(describePen(pens, pen)+"\n")
 
-    if hpglOut:
+    if hpglOut and not svgSimulation:
         g = emitHPGL(penData, pens=pens)
-    else:    
+    else:
         g = emitGcode(penData, align=align, scalingMode=scalingMode, tolerance=tolerance, 
-                plotter=plotter, gcodePause=gcodePause, pens=pens, pauseAtStart=pauseAtStart)
+                plotter=plotter, gcodePause=gcodePause, pens=pens, pauseAtStart=pauseAtStart, simulation=svgSimulation)
 
     if g:
-        if sendPort is not None:
+        if sendPort is not None and not svgSimulation:
             import gcodeplotutils.sendgcode as sendgcode
             if hpglOut:
                 sendgcode.sendHPGL(port=sendPort, speed=115200, commands=g)
