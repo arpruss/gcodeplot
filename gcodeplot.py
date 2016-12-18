@@ -586,13 +586,11 @@ if __name__ == '__main__':
  -x|--align-x=mode: horizontal alignment: none(n), left(l), right(r) or center(c)
  -y|--align-y=mode: vertical alignment: none(n), bottom(b), top(t) or center(c)
  -a|--area=x1,y1,x2,y2: gcode print area in millimeters
- -Z|--pen-up-z=z: z-position for pen-up (millimeters)
- -z|--pen-down-z=z: z-position for pen-down (millimeters)
+ -Z|--lift-delta-z=z: amount to lift for pen-up (millimeters)
+ -z|--work-z=z: z-position for drawing (millimeters)
  -p|--parking-z=z: z-position for parking (millimeters)
- -Z|--pen-up-z=z: z-position for pen-up (millimeters)
- -z|--pen-down-z=z: z-position for pen-down (millimeters)
- -Z|--pen-up-speed=z: speed for moving with pen up (millimeters/second)
- -z|--pen-down-speed=z: speed for moving with pen down (millimeters/second)
+ -F|--pen-up-speed=z: speed for moving with pen up (millimeters/second)
+ -f|--pen-down-speed=z: speed for moving with pen down (millimeters/second)
  -u|--z-speed=s: speed for up/down movement (millimeters/second)
  -H|--hpgl-out*: output is HPGL, not gcode; most options ignored [default: off]
  -T|--shading-threshold=n: darkest grayscale to leave unshaded (decimal, 0. to 1.; set to 0 to turn off SVG shading) [default 1.0]
@@ -602,7 +600,7 @@ if __name__ == '__main__':
  -X|--shading-crosshatch*: cross hatch shading
  -L|--stroke-all*: stroke even regions specified by SVG to have no stroke
  -O|--shading-avoid-outline*: avoid going over outline twice when shading
- -o|--optimize-timeout=t: timeout on optimization attempt (seconds; will be retried once; set to 0 to turn off optimization) [default 30]
+ -o|--optimization-timeout=t: timeout on optimization attempt (seconds; will be retried once; set to 0 to turn off optimization) [default 30]
  -d|--sort*: sort paths from inside to outside for cutting [default off]
  -c|--config-file=filename: read arguments, one per line, from filename
  -w|--gcode-pause=cmd: gcode pause command [default: @pause]
@@ -639,7 +637,7 @@ if __name__ == '__main__':
     try:
         opts, args = getopt.getopt(sys.argv[1:], "UR:Uhdulw:P:o:Oc:LT:M:m:A:XHrf:na:D:t:s:S:x:y:z:Z:p:f:F:", 
                         ["help", "down", "up", "lower-left", "allow-repeats", "no-allow-repeats", "scale=", "config-file=",
-                        "area=", 'align-x=', 'align-y=', 'optimize-timeout=', "pens=",
+                        "area=", 'align-x=', 'align-y=', 'optimization-timeout=', "pens=",
                         'input-dpi=', 'tolerance=', 'send=', 'send-speed=', 'pen-down-z=', 'pen-up-z=', 'parking-z=',
                         'pen-down-speed=', 'pen-up-speed=', 'z-speed=', 'hpgl-out', 'no-hpgl-out', 'shading-threshold=',
                         'shading-angle=', 'shading-crosshatch', 'no-shading-crosshatch', 'shading-avoid-outline', 
@@ -769,7 +767,7 @@ if __name__ == '__main__':
             elif opt in ('-c', '--config-file'):
                 configOpts = getConfigOpts(arg)
                 opts = opts[:i+1] + configOpts + opts[i+1:]
-            elif opt in ('-o', '--optimize-timeout'):
+            elif opt in ('-o', '--optimization-timeout'):
                 optimizationTimeOut = float(arg)
                 if optimizationTimeOut > 0:
                     sort = False
@@ -858,7 +856,7 @@ if __name__ == '__main__':
         print('shading-crosshatch' if shader.crossHatch else 'no-shading-crosshatch')
         print('stroke-all' if strokeAll else 'no-stroke-all')
         print('optimization-timeout=%g' % (optimizationTimeOut))
-        print('sort' if sort else 'no-sort')
+        print('sort' if sortPaths else 'no-sort')
         print('pause-at-start' if pauseAtStart else 'no-pause-at-start')
         print('extract-color=all' if extractColor is None else 'extract-color=rgb(%.3f,%.3f,%.3f)' % tuple(extractColor))
         print('simulation' if svgSimulation else 'no-simulation')
