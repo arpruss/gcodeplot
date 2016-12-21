@@ -55,7 +55,7 @@ def gcodeHeader(plotter):
     gcode.append('G1 S1; endstops')
     gcode.append('G1 E0; no extrusion')
     gcode.append('G21; millimeters')
-    gcode.append('G91 G0 F%.1f Z%.3f; pen park !!Zsafe' % (plotter.zSpeed*      60., plotter.safeDeltaZ))
+    gcode.append('G91 G0 F%.1f Z%.3f; pen park !!Zsafe' % (plotter.zSpeed*60., plotter.safeDeltaZ))
     gcode.append('G90; absolute')
     gcode.append('G28 X; home')
     gcode.append('G28 Y; home')
@@ -360,33 +360,33 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
     def distance(a,b):
         return math.hypot(a[0]-b[0],a[1]-b[1])
     
-    def penUp():
-        if state.curZ is None or state.curZ < plotter.penUpZ:
+    def penUp(force=False):
+        if state.curZ is None or state.curZ < plotter.penUpZ or force:
             if not simulation:
                 gcode.append('G0 F%.1f Z%.3f; pen up !!Zup' % (plotter.zSpeed*60., plotter.penUpZ))
             if state.curZ is not None:
                 state.time += abs(plotter.penUpZ-state.curZ) / plotter.zSpeed
             state.curZ = plotter.penUpZ
         
-    def penDown():
-        if state.curZ is None or state.curZ != plotter.workZ:
+    def penDown(force=False):
+        if state.curZ is None or state.curZ != plotter.workZ or force:
             if not simulation:
                 gcode.append('G0 F%.1f Z%.3f; pen down !!Zwork' % (plotter.zSpeed*60., plotter.workZ))
             state.time += abs(state.curZ-plotter.workZ) / plotter.zSpeed
             state.curZ = plotter.workZ
 
-    def penMove(down, speed, p):
+    def penMove(down, speed, p, force=False):
         def flip(y):
             return plotter.xyMax[1] - (y-plotter.xyMin[1])
         if state.curXY is None:
             d = float("inf")
         else:
             d = distance(state.curXY, p)
-        if d > tolerance:
+        if d > tolerance or force:
             if down:
-                penDown()
+                penDown(force=force)
             else:
-                penUp()
+                penUp(force=force)
             if not simulation:
                 gcode.append('G%d F%.1f X%.3f Y%.3f; %s !!Xleft+%.3f Ybottom+%.3f' % (
                     1 if down else 0, speed*60., p[0], p[1], "draw" if down else "move",
@@ -429,6 +429,7 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
             
             if newPen and (pen != 1 or pauseAtStart) and not simulation:
                 gcode.append( gcodePause+' load pen: ' + describePen(pens,pen) )
+                penMove(False, plotter.moveSpeed, s.scalePoint(segment[0]), force=True)
             newPen = False
             
             for i in range(1,len(segment)):
