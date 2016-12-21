@@ -57,8 +57,8 @@ def gcodeHeader(plotter):
     gcode.append('G21; millimeters')
     gcode.append('G91 G0 F%.1f Z%.3f; pen park !!Zsafe' % (plotter.zSpeed*      60., plotter.safeDeltaZ))
     gcode.append('G90; absolute')
-    gcode.append('G28 Y; home')
     gcode.append('G28 X; home')
+    gcode.append('G28 Y; home')
     gcode.append('G28 Z; home')
     return gcode
 
@@ -891,7 +891,7 @@ if __name__ == '__main__':
             sys.exit(1)
         import gcodeplotutils.sendgcode as sendgcode
 
-        sendgcode.sendGcode(port=sendPort, speed=115200, commands=GCODE_HEADER + [gcodePause], gcodePause=gcodePause, variables=variables, formulas=formulas)
+        sendgcode.sendGcode(port=sendPort, speed=115200, commands=gcodeHeader(plotter) + [gcodePause], gcodePause=gcodePause, variables=variables, formulas=formulas)
         sys.exit(0)
 
     with open(args[0]) as f:
