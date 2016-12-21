@@ -38,11 +38,6 @@ def sendHPGL(port, commands):
     s.close()
 
 def sendGcode(port, commands, speed=115200, quiet = False, gcodePause="@pause", plotter=None, variables={}, formulas={}):
-    """
-    If variables are used, all movement should be absolute before a pause.
-    Formulas cannot reference other formulas, but must be defined directly in terms of the variables.
-    """
-
     class State(object):
         pass
         
@@ -73,11 +68,20 @@ def sendGcode(port, commands, speed=115200, quiet = False, gcodePause="@pause", 
 ## TODO: flow control  
     state.lineNumber = 2
     
-    def evaluate(value):
-        for x in formulas:
-            value  = re.sub(r'\b' + x + r'\b', '('+formulas[x]+')', value)
-        for x in variables:
-            value = re.sub(r'\b' + x + r'\b', repr(variables[x]), value)
+    def evaluate(value, MAX_DEPTH=100):
+        tryAgain = True
+        depth = 0
+        while tryAgain and depth<MAX_DEPTH:
+            tryAgain = False
+            for x in formulas:
+                value,n = re.subn(r'\b' + x + r'\b', '('+formulas[x]+')', value)
+                if n > 0: tryAgain = True
+            for x in variables:
+                value,n = re.subn(r'\b' + x + r'\b', repr(variables[x]), value)
+                if n > 0: tryAgain = True
+            depth += 1
+        if depth >= MAX_DEPTH:
+            raise ValueError()
         return safeEval(value)
 
     def sendCommand(c):
@@ -143,8 +147,15 @@ Commands available:
                     print("\nCurrent variables:")
                     print('\t'.join(("%s=%.5g" % (var, variables[var]) for var in sorted(variables))))
                 if formulas:
-                    print("\nCurrent formulas:")
-                    print('\t'.join(("%s=%s=%.5g" % (var, formulas[var], evaluate(formulas[var])) for var in sorted(formulas))))
+                    print("\nCurrent formulas and constants:")
+                    out = []
+                    for var in sorted(formulas):
+                        try:
+                            value = float(formulas[var])
+                            out.append("%s=%.5g" % (var, value))
+                        except ValueError:
+                            out.append("%s=%s=%.5g" % (var, formulas[var], evaluate(formulas[var])))
+                    print('\t'.join(out))
                 
             showVariables()
                 
@@ -156,6 +167,8 @@ Commands available:
                 if '=' in cmd:
                     try:
                         var,value = re.split(r'\s*=\s*', cmd, maxsplit=2)
+                        if var in formulas:
+                            raise ValueError()
                         variables[var] = evaluate(value)
                     except:
                         print("Syntax error.")

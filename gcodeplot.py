@@ -879,8 +879,8 @@ if __name__ == '__main__':
         sys.exit(0)
         
     variables = {'lift':plotter.liftDeltaZ, 'work':plotter.workZ, 'safe':plotter.safeDeltaZ, 'left':plotter.xyMin[0],
-        'bottom':plotter.xyMin[1], 'right':plotter.xyMax[0], 'top':plotter.xyMax[1]}
-    formulas = {'up':'work+lift', 'park':'work+safe', 'centerx':'(left+right)/2.', 'centery':'(top+bottom)/2.'}
+        'bottom':plotter.xyMin[1]}
+    formulas = {'right':str(plotter.xyMax[0]), 'top':str(plotter.xyMax[1]), 'up':'work+lift', 'park':'work+safe', 'centerx':'(left+right)/2.', 'centery':'(top+bottom)/2.'}
         
     if len(args) == 0:
         if not pauseAtStart:
