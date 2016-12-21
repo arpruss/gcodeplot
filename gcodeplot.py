@@ -21,7 +21,6 @@ ALIGN_LEFT = ALIGN_BOTTOM
 ALIGN_RIGHT = ALIGN_TOP
 ALIGN_CENTER = 3
 
-GCODE_HEADER = ['G90; absolute', 'G0 S1 E0', 'G1 S1 E0', 'G21; millimeters', 'G28; home']
 
 class Plotter(object):
     def __init__(self, xyMin=(10,8), xyMax=(192,150), 
@@ -49,6 +48,20 @@ class Plotter(object):
     def penUpZ(self):
         return self.workZ + self.liftDeltaZ
         
+def gcodeHeader(plotter):
+    gcode = []
+    gcode.append('G0 S1; endstops')
+    gcode.append('G0 E0; no extrusion')
+    gcode.append('G1 S1; endstops')
+    gcode.append('G1 E0; no extrusion')
+    gcode.append('G21; millimeters')
+    gcode.append('G91 G0 F%.1f Z%.3f; pen park !!Zsafe' % (plotter.zSpeed*      60., plotter.safeDeltaZ))
+    gcode.append('G90; absolute')
+    gcode.append('G28 Y; home')
+    gcode.append('G28 X; home')
+    gcode.append('G28 Z; home')
+    return gcode
+
 def isSameColor(rgb1, rgb2):
     if rgb1 is None or rgb2 is None:
         return rgb1 is rgb2
@@ -319,7 +332,7 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
         scale.align(plotter, xyMin, xyMax, align)
         
     if not simulation:
-        gcode = GCODE_HEADER[:]
+        gcode = gcodeHeader(plotter)
     else:
         gcode = []
         gcode.append('<?xml version="1.0" standalone="yes"?>')
@@ -328,12 +341,12 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
         
     def park():
         if not simulation:
-            gcode.append('G1 F%.1f Z%.3f; pen park !!Zpark' % (plotter.zSpeed*60., plotter.safeUpZ))
+            gcode.append('G0 F%.1f Z%.3f; pen park !!Zpark' % (plotter.zSpeed*60., plotter.safeUpZ))
 
     park()
     if not simulation:
-        gcode.append('G1 F%.1f Y%.3f' % (plotter.moveSpeed*60.,plotter.xyMin[1]))
-        gcode.append('G1 F%.1f X%.3f' % (plotter.moveSpeed*60.,plotter.xyMin[0]))
+        gcode.append('G0 F%.1f Y%.3f; !!Ybottom' % (plotter.moveSpeed*60.,   plotter.xyMin[1]))
+        gcode.append('G0 F%.1f X%.3f; !!Xleft' % (plotter.moveSpeed*60.,   plotter.xyMin[0]))
     
     class State(object):
         pass
@@ -375,7 +388,9 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
             else:
                 penUp()
             if not simulation:
-                gcode.append('G1 F%.1f X%.3f Y%.3f; %s' % (speed*60., p[0], p[1], "draw" if down else "move"))
+                gcode.append('G%d F%.1f X%.3f Y%.3f; %s !!Xleft+%.3f Ybottom+%.3f' % (
+                    1 if down else 0, speed*60., p[0], p[1], "draw" if down else "move",
+                    p[0]-plotter.xyMin[0], p[1]-plotter.xyMin[1]))
             else:
                 start = state.curXY if state.curXY is not None else plotter.xyMin
                 color = [int(math.floor(255*x+0.5)) for x in (state.penColor if down else (0,0.5,0))]

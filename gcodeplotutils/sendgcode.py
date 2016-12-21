@@ -113,6 +113,8 @@ def sendGcode(port, commands, speed=115200, quiet = False, gcodePause="@pause", 
                 if 'x' in variables: del variables['x']
                 if 'y' in variables: del variables['y']
                 if 'z' in variables: del variables['z']
+            elif re.match(r'[Gg]90\b', c):
+                state.relative = False
             elif re.match(r'[Gg]28\b', c):
                 if 'x' in variables: del variables['x']
                 if 'y' in variables: del variables['y']
