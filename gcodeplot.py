@@ -603,7 +603,6 @@ if __name__ == '__main__':
  -a|--area=x1,y1,x2,y2: gcode print area in millimeters
  -Z|--lift-delta-z=z: amount to lift for pen-up (millimeters)
  -z|--work-z=z: z-position for drawing (millimeters)
- -p|--parking-z=z: z-position for parking (millimeters)
  -F|--pen-up-speed=z: speed for moving with pen up (millimeters/second)
  -f|--pen-down-speed=z: speed for moving with pen down (millimeters/second)
  -u|--z-speed=s: speed for up/down movement (millimeters/second)
@@ -862,7 +861,6 @@ if __name__ == '__main__':
         print('safe-delta-z=%g' % (plotter.safeDeltaZ))
         print('lift-delta-z=%g' % (plotter.liftDeltaZ))
         print('work-z=%g' % (plotter.workZ))
-        print('parking-z=%g' % (plotter.safeUpZ))
         print('hpgl-out' if hpglOut else 'no-hpgl-out')        
         print('shading-threshold=%g' % (shader.unshadedThreshold))
         print('shading-lightest=%g' % (shader.lightestSpacing))

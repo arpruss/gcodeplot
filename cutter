@@ -1,0 +1,17 @@
+area=10,0,192,120
+input-dpi=1016,1016
+safe-delta-z=20
+lift-delta-z=2.5
+work-z=8.55
+no-hpgl-out
+shading-threshold=1
+shading-lightest=3
+shading-darkest=0.5
+shading-angle=45
+no-shading-crosshatch
+no-stroke-all
+optimization-timeout=30
+no-sort
+no-pause-at-start
+extract-color=all
+no-simulation
