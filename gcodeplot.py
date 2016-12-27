@@ -122,7 +122,10 @@ class Scale(object):
     def scalePoint(self, point):
         return (point[0]*self.scale[0]+self.offset[0], point[1]*self.scale[1]+self.offset[1])
         
-def safeSorted(data,comparison=cmp):
+def comparison(a,b):
+    return (a>b)-(a<b)
+        
+def safeSorted(data,comparison=comparison):
     """
     A simpleminded recursive merge sort that will work even if the comparison function fails to be a partial order.
     Makes (shallow) copies of the data, which uses more memory than is absolutely necessary. In the intended application,
@@ -224,7 +227,7 @@ def comparePaths(path1,path2,tolerance=0.05,pointsToCheck=3):
         return 1
     x1 = sum(p.real for p in path1) / len(path1)
     x2 = sum(p.real for p in path2) / len(path2)
-    return cmp(x1,x2)
+    return comparison(x1,x2)
 
 def removePenBob(data):
     """
