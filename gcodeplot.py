@@ -10,6 +10,7 @@ import svgpath.parser as parser
 import cmath
 from random import sample
 from svgpath.shader import Shader
+from gcodeplotutils.processoffset import OffsetProcessor
 
 SCALE_NONE = 0
 SCALE_DOWN_ONLY = 1
@@ -20,7 +21,6 @@ ALIGN_TOP = 2
 ALIGN_LEFT = ALIGN_BOTTOM
 ALIGN_RIGHT = ALIGN_TOP
 ALIGN_CENTER = 3
-
 
 class Plotter(object):
     def __init__(self, xyMin=(10,8), xyMax=(192,150), 
@@ -87,7 +87,7 @@ class Scale(object):
         self.scale = scale
         
     def clone(self):
-        return Scale(scale=self.scale, offset=self.offset)
+        return Scale(scale=[self.scale[0],self.scale[1]], offset=[self.offset[0],self.offset[1]])
         
     def __repr__(self):
         return str(self.scale)+','+str(self.offset)
@@ -101,8 +101,8 @@ class Scale(object):
                 s[i] = 1.
             else:
                 s[i] = (plotter.xyMax[i]-plotter.xyMin[i]) / delta
-        self.scale = (min(s),min(s))
-        self.offset = tuple(plotter.xyMin[i] - self.scale[i]*xyMin[i] for i in range(2))
+        self.scale = [min(s),min(s)]
+        self.offset = list(plotter.xyMin[i] - xyMin[i]*self.scale[i] for i in range(2))
         
     def align(self, plotter, xyMin, xyMax, align):
         o = [0,0]
@@ -112,13 +112,12 @@ class Scale(object):
             elif align[i] == ALIGN_RIGHT:
                 o[i] = plotter.xyMax[i] - self.scale[i]*xyMax[i]
             elif align[i] == ALIGN_NONE:
-                o[i] = plotter.xyMin[i]
+                o[i] = self.offset[i] # plotter.xyMin[i]
             elif align[i] == ALIGN_CENTER:
                 o[i] = 0.5 * (plotter.xyMin[i] - self.scale[i]*xyMin[i] + plotter.xyMax[i] - self.scale[i]*xyMax[i])            
             else:
                 raise ValueError()
-        self.offset = tuple(o)
-                
+        self.offset = o                
         
     def scalePoint(self, point):
         return (point[0]*self.scale[0]+self.offset[0], point[1]*self.scale[1]+self.offset[1])
@@ -316,7 +315,7 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
                 for i in range(2):
                     xyMin[i] = min(xyMin[i], point[i])
                     xyMax[i] = max(xyMax[i], point[i])
-    
+
     if scalingMode == SCALE_NONE:
         if not allFit:
             sys.stderr.write("Drawing out of range: "+str(xyMin)+" "+str(xyMax)+"\n")
@@ -327,7 +326,7 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
             return None
         scale = Scale()
         scale.fit(plotter, xyMin, xyMax)
-        
+       
     if align is not None:
         scale.align(plotter, xyMin, xyMax, align)
         
@@ -420,7 +419,7 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
         s = scale.clone()
 
         if pens is not None and pen in pens:
-            s.offset = (s.offset[0]-pens[pen].offset[0],s.offset[0]-pens[pen].offset[0])
+            s.offset = (s.offset[0]-pens[pen].offset[0],s.offset[1]-pens[pen].offset[1])
 
         newPen = True
 
@@ -594,7 +593,7 @@ if __name__ == '__main__':
     --dump-options: show current settings instead of doing anything
  -h|--help: this
  -r|--allow-repeats*: do not deduplicate paths
- -f|--scale=mode: scaling option: none(n), fit(f), down-only(d) [default none]
+ -f|--scale=mode: scaling option: none(n), fit(f), down-only(d) [default none; other options don't work with tool-offset]
  -D|--input-dpi=xdpi[,ydpi]: hpgl dpi
  -t|--tolerance=x: ignore (some) deviations of x millimeters or less [default 0.05]
  -s|--send=port*: send gcode to serial port instead of stdout
@@ -622,6 +621,8 @@ if __name__ == '__main__':
  -P|--pens=penfile: read output pens from penfile
  -U|--pause-at-start*: pause at start (can be included without any input file to manually move stuff)
  -R|--extract-color=c: extract color (specified in SVG format , e.g., rgb(1,0,0) or #ff0000 or red)
+    --tool-offset=x: cutting tool offset (millimeters) [default 0.0]
+    --overcut=x: overcut (millimeters) [default 0.0]
  
  The options with an asterisk are default off and can be turned off again by adding "no-" at the beginning to the long-form option, e.g., --no-stroke-all or --no-send.
 """)
@@ -648,6 +649,8 @@ if __name__ == '__main__':
     pauseAtStart = False
     sortPaths = False
     svgSimulation = False
+    toolOffset = 0.
+    overcut = 0.
     
     try:
         opts, args = getopt.getopt(sys.argv[1:], "UR:Uhdulw:P:o:Oc:LT:M:m:A:XHrf:na:D:t:s:S:x:y:z:Z:p:f:F:", 
@@ -657,7 +660,7 @@ if __name__ == '__main__':
                         'pen-down-speed=', 'pen-up-speed=', 'z-speed=', 'hpgl-out', 'no-hpgl-out', 'shading-threshold=',
                         'shading-angle=', 'shading-crosshatch', 'no-shading-crosshatch', 'shading-avoid-outline', 
                         'pause-at-start', 'no-pause-at-start', 'min-x=', 'max-x=', 'min-y=', 'max-y=',
-                        'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all', 'gcode-pause', 'dump-options', 'tab=', 'extract-color=', 'sort', 'no-sort', 'simulation', 'no-simulation'], )
+                        'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all', 'gcode-pause', 'dump-options', 'tab=', 'extract-color=', 'sort', 'no-sort', 'simulation', 'no-simulation', 'tool-offset=', 'overcut='], )
 
         if len(args) + len(opts) == 0:
             raise getopt.GetoptError("invalid commandline")
@@ -741,6 +744,10 @@ if __name__ == '__main__':
                 plotter.liftDeltaZ = float(arg)
             elif opt in ('-z', '--work-z'):
                 plotter.workZ = float(arg)
+            elif opt == '--tool-offset':
+                toolOffset = float(arg)
+            elif opt == '--overcut':
+                overcut = float(arg)
             elif opt in ('-p', '--safe-delta-z'):
                 plotter.safeDeltaZ = float(arg)
             elif opt in ('-F', '--pen-up-speed'):
@@ -873,6 +880,8 @@ if __name__ == '__main__':
         print('sort' if sortPaths else 'no-sort')
         print('pause-at-start' if pauseAtStart else 'no-pause-at-start')
         print('extract-color=all' if extractColor is None else 'extract-color=rgb(%.3f,%.3f,%.3f)' % tuple(extractColor))
+        print('tool-offset=%.3f' % toolOffset)
+        print('overcut=%.3f' % overcut)
         print('simulation' if svgSimulation else 'no-simulation')
         
         sys.exit(0)
@@ -917,6 +926,11 @@ if __name__ == '__main__':
 
     if doDedup:
         penData = dedup(penData)
+        
+    if toolOffset > 0.:
+        op = OffsetProcessor(toolOffset=toolOffset, overcut=overcut, tolerance=tolerance)
+        for pen in penData:
+            penData[pen] = op.processPath(penData[pen])
 
     if optimizationTimeOut > 0.:
         for pen in penData:
