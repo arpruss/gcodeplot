@@ -651,6 +651,7 @@ if __name__ == '__main__':
     svgSimulation = False
     toolOffset = 0.
     overcut = 0.
+    toolMode = "custom"
     
     try:
         opts, args = getopt.getopt(sys.argv[1:], "UR:Uhdulw:P:o:Oc:LT:M:m:A:XHrf:na:D:t:s:S:x:y:z:Z:p:f:F:", 
@@ -660,7 +661,7 @@ if __name__ == '__main__':
                         'pen-down-speed=', 'pen-up-speed=', 'z-speed=', 'hpgl-out', 'no-hpgl-out', 'shading-threshold=',
                         'shading-angle=', 'shading-crosshatch', 'no-shading-crosshatch', 'shading-avoid-outline', 
                         'pause-at-start', 'no-pause-at-start', 'min-x=', 'max-x=', 'min-y=', 'max-y=',
-                        'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all', 'gcode-pause', 'dump-options', 'tab=', 'extract-color=', 'sort', 'no-sort', 'simulation', 'no-simulation', 'tool-offset=', 'overcut='], )
+                        'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all', 'gcode-pause', 'dump-options', 'tab=', 'extract-color=', 'sort', 'no-sort', 'simulation', 'no-simulation', 'tool-offset=', 'overcut=', 'boolean-shading-crosshatch=' ], )
 
         if len(args) + len(opts) == 0:
             raise getopt.GetoptError("invalid commandline")
@@ -768,6 +769,8 @@ if __name__ == '__main__':
                 shader.darkestSpacing = float(arg)
             elif opt in ('-A', '--shading-angle'):
                 shader.angle = float(arg)
+            elif opt == '--boolean-shading-crosshatch':
+                shader.crossHatch = int(arg) != 0
             elif opt in ('-X', '--shading-crosshatch'):
                 shader.crossHatch = True
             elif opt == '--no-shading-crosshatch':
@@ -815,6 +818,8 @@ if __name__ == '__main__':
                 svgSimulation = False
             elif opt == '--tab':
                 pass # Inkscape
+            elif opt == "--tool-mode":
+                toolMode = arg
             else:
                 raise ValueError("Unrecognized argument "+opt)
             i += 1
@@ -885,6 +890,11 @@ if __name__ == '__main__':
         print('simulation' if svgSimulation else 'no-simulation')
         
         sys.exit(0)
+        
+    if toolMode == 'cut':
+        shader.unshadedThreshold = 0
+    elif toolMode == 'draw':
+        toolOffset = 0.
         
     variables = {'lift':plotter.liftDeltaZ, 'work':plotter.workZ, 'safe':plotter.safeDeltaZ, 'left':plotter.xyMin[0],
         'bottom':plotter.xyMin[1]}
