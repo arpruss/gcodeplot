@@ -614,7 +614,7 @@ if __name__ == '__main__':
  -X|--shading-crosshatch*: cross hatch shading
  -L|--stroke-all*: stroke even regions specified by SVG to have no stroke
  -O|--shading-avoid-outline*: avoid going over outline twice when shading
- -o|--optimization-timeout=t: timeout on optimization attempt (seconds; will be retried once; set to 0 to turn off optimization) [default 30]
+ -o|--optimization-time=t: max time to spend optimizing (seconds; set to 0 to turn off optimization) [default 60]
  -d|--sort*: sort paths from inside to outside for cutting [default off]
  -c|--config-file=filename: read arguments, one per line, from filename
  -w|--gcode-pause=cmd: gcode pause command [default: @pause]
@@ -641,7 +641,7 @@ if __name__ == '__main__':
     strokeAll = False
     extractColor = None
     gcodePause = "@pause"
-    optimizationTimeOut = 30
+    optimizationTime = 30
     dpi = (1016., 1016.)
     pens = {1:Pen('1 (0.,0.) black default')}
     doDump = False
@@ -652,16 +652,18 @@ if __name__ == '__main__':
     toolOffset = 0.
     overcut = 0.
     toolMode = "custom"
+    booleanExtractColor = False
     
     try:
         opts, args = getopt.getopt(sys.argv[1:], "UR:Uhdulw:P:o:Oc:LT:M:m:A:XHrf:na:D:t:s:S:x:y:z:Z:p:f:F:", 
                         ["help", "down", "up", "lower-left", "allow-repeats", "no-allow-repeats", "scale=", "config-file=",
-                        "area=", 'align-x=', 'align-y=', 'optimization-timeout=', "pens=",
+                        "area=", 'align-x=', 'align-y=', 'optimization-time=', "pens=",
                         'input-dpi=', 'tolerance=', 'send=', 'send-speed=', 'pen-down-z=', 'pen-up-z=', 'parking-z=',
                         'pen-down-speed=', 'pen-up-speed=', 'z-speed=', 'hpgl-out', 'no-hpgl-out', 'shading-threshold=',
                         'shading-angle=', 'shading-crosshatch', 'no-shading-crosshatch', 'shading-avoid-outline', 
                         'pause-at-start', 'no-pause-at-start', 'min-x=', 'max-x=', 'min-y=', 'max-y=',
-                        'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all', 'gcode-pause', 'dump-options', 'tab=', 'extract-color=', 'sort', 'no-sort', 'simulation', 'no-simulation', 'tool-offset=', 'overcut=', 'boolean-shading-crosshatch=' ], )
+                        'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all', 'gcode-pause', 'dump-options', 'tab=', 'extract-color=', 'sort', 'no-sort', 'simulation', 'no-simulation', 'tool-offset=', 'overcut=', 
+                        'boolean-shading-crosshatch=', 'boolean-extract-color=', 'boolean-sort=' ], )
 
         if len(args) + len(opts) == 0:
             raise getopt.GetoptError("invalid commandline")
@@ -771,6 +773,10 @@ if __name__ == '__main__':
                 shader.angle = float(arg)
             elif opt == '--boolean-shading-crosshatch':
                 shader.crossHatch = int(arg) != 0
+            elif opt == '--boolean-extract-color':
+                booleanExtractColor = int(arg) != 0
+            elif opt == '--boolean-sort':
+                sort = int(arg) != 0
             elif opt in ('-X', '--shading-crosshatch'):
                 shader.crossHatch = True
             elif opt == '--no-shading-crosshatch':
@@ -792,9 +798,9 @@ if __name__ == '__main__':
             elif opt in ('-c', '--config-file'):
                 configOpts = getConfigOpts(arg)
                 opts = opts[:i+1] + configOpts + opts[i+1:]
-            elif opt in ('-o', '--optimization-timeout'):
-                optimizationTimeOut = float(arg)
-                if optimizationTimeOut > 0:
+            elif opt in ('-o', '--optimization-time'):
+                optimizationTime = float(arg)
+                if optimizationTime > 0:
                     sort = False
             elif opt in ('-h', '--help'):
                 help()
@@ -809,7 +815,7 @@ if __name__ == '__main__':
                     extractColor = parser.rgbFromColor(arg)
             elif opt in ('d', '--sort'):
                 sortPaths = True
-                optimizationTimeOut = 0
+                optimizationTime = 0
             elif opt == '--no-sort':
                 sortPaths = False
             elif opt in ('U', '--simulation'):
@@ -881,7 +887,7 @@ if __name__ == '__main__':
         print('shading-angle=%g' % (shader.angle))
         print('shading-crosshatch' if shader.crossHatch else 'no-shading-crosshatch')
         print('stroke-all' if strokeAll else 'no-stroke-all')
-        print('optimization-timeout=%g' % (optimizationTimeOut))
+        print('optimization-time=%g' % (optimizationTime))
         print('sort' if sortPaths else 'no-sort')
         print('pause-at-start' if pauseAtStart else 'no-pause-at-start')
         print('extract-color=all' if extractColor is None else 'extract-color=rgb(%.3f,%.3f,%.3f)' % tuple(extractColor))
@@ -893,8 +899,11 @@ if __name__ == '__main__':
         
     if toolMode == 'cut':
         shader.unshadedThreshold = 0
+        optimizationTime = 0
+        sortPaths = True
     elif toolMode == 'draw':
         toolOffset = 0.
+        sortPaths = False
         
     variables = {'lift':plotter.liftDeltaZ, 'work':plotter.workZ, 'safe':plotter.safeDeltaZ, 'left':plotter.xyMin[0],
         'bottom':plotter.xyMin[1]}
@@ -944,9 +953,9 @@ if __name__ == '__main__':
         for pen in penData:
             penData[pen] = op.processPath(penData[pen])
 
-    if optimizationTimeOut > 0.:
+    if optimizationTime > 0.:
         for pen in penData:
-            penData[pen] = anneal.optimize(penData[pen], timeout=optimizationTimeOut)
+            penData[pen] = anneal.optimize(penData[pen], timeout=optimizationTime/2.)
         penData = removePenBob(penData)
         
     if sortPaths:
