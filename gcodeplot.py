@@ -299,6 +299,9 @@ def penColor(pens, pen):
         return (0.,0.,0.)
         
 def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align = None, tolerance=0, gcodePause="@pause", pauseAtStart = False, simulation = False):
+    if len(data) == 0:
+        return None
+
     xyMin = [float("inf"),float("inf")]
     xyMax = [float("-inf"),float("-inf")]
     
@@ -322,7 +325,6 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
             return None
     elif scalingMode != SCALE_DOWN_ONLY or not allFit:
         if xyMin[0] > xyMax[0]:
-            sys.stderr.write("No points.\n")
             return None
         scale = Scale()
         scale.fit(plotter, xyMin, xyMax)
@@ -436,12 +438,13 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
 
     park()
     
-    sys.stderr.write('Estimated printing time: %dm %.1fs\n' % (state.time // 60, state.time % 60))
-    sys.stderr.flush()
-    
     if simulation:
         gcode.append('</svg>')
 
+    if not quiet:
+        sys.stderr.write('Estimated printing time: %dm %.1fs\n' % (state.time // 60, state.time % 60))
+        sys.stderr.flush()
+    
     return gcode
     
 def parseHPGL(hpgl,dpi=(1016.,1016.)):
@@ -587,9 +590,13 @@ def getConfigOpts(filename):
     
 if __name__ == '__main__':
 
-    def help():
-        sys.stdout.write("gcodeplot.py [options] [inputfile [> output.gcode]\n")
-        sys.stdout.write("""
+    def help(error=False):
+        if error:
+            output = sys.stderr
+        else:
+            output = sys.stdout
+        output.write("gcodeplot.py [options] [inputfile [> output.gcode]\n")
+        output.write("""
     --dump-options: show current settings instead of doing anything
  -h|--help: this
  -r|--allow-repeats*: do not deduplicate paths
@@ -653,17 +660,18 @@ if __name__ == '__main__':
     overcut = 0.
     toolMode = "custom"
     booleanExtractColor = False
+    quiet = False
     
     try:
         opts, args = getopt.getopt(sys.argv[1:], "UR:Uhdulw:P:o:Oc:LT:M:m:A:XHrf:na:D:t:s:S:x:y:z:Z:p:f:F:", 
                         ["help", "down", "up", "lower-left", "allow-repeats", "no-allow-repeats", "scale=", "config-file=",
                         "area=", 'align-x=', 'align-y=', 'optimization-time=', "pens=",
-                        'input-dpi=', 'tolerance=', 'send=', 'send-speed=', 'pen-down-z=', 'pen-up-z=', 'parking-z=',
+                        'input-dpi=', 'tolerance=', 'send=', 'send-speed=', 'work-z=', 'lift-delta-z=', 'safe-delta-z=',
                         'pen-down-speed=', 'pen-up-speed=', 'z-speed=', 'hpgl-out', 'no-hpgl-out', 'shading-threshold=',
                         'shading-angle=', 'shading-crosshatch', 'no-shading-crosshatch', 'shading-avoid-outline', 
                         'pause-at-start', 'no-pause-at-start', 'min-x=', 'max-x=', 'min-y=', 'max-y=',
                         'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all', 'gcode-pause', 'dump-options', 'tab=', 'extract-color=', 'sort', 'no-sort', 'simulation', 'no-simulation', 'tool-offset=', 'overcut=', 
-                        'boolean-shading-crosshatch=', 'boolean-extract-color=', 'boolean-sort=' ], )
+                        'boolean-shading-crosshatch=', 'boolean-sort=', 'tool-mode=' ], )
 
         if len(args) + len(opts) == 0:
             raise getopt.GetoptError("invalid commandline")
@@ -772,11 +780,9 @@ if __name__ == '__main__':
             elif opt in ('-A', '--shading-angle'):
                 shader.angle = float(arg)
             elif opt == '--boolean-shading-crosshatch':
-                shader.crossHatch = int(arg) != 0
-            elif opt == '--boolean-extract-color':
-                booleanExtractColor = int(arg) != 0
+                shader.crossHatch = arg.strip() != 'false'
             elif opt == '--boolean-sort':
-                sort = int(arg) != 0
+                sort = arg.strip() != 'false'
             elif opt in ('-X', '--shading-crosshatch'):
                 shader.crossHatch = True
             elif opt == '--no-shading-crosshatch':
@@ -809,7 +815,7 @@ if __name__ == '__main__':
                 doDump = True
             elif opt in ('R', '--extract-color'):
                 arg = arg.lower()
-                if arg == 'all':
+                if arg == 'all' or len(arg.strip())==0:
                     extractColor = None
                 else:
                     extractColor = parser.rgbFromColor(arg)
@@ -823,15 +829,16 @@ if __name__ == '__main__':
             elif opt == '--no-simulation':
                 svgSimulation = False
             elif opt == '--tab':
-                pass # Inkscape
+                quiet = True # Inkscape
             elif opt == "--tool-mode":
                 toolMode = arg
             else:
                 raise ValueError("Unrecognized argument "+opt)
             i += 1
         
-    except getopt.GetoptError:
-        help()
+    except getopt.GetoptError as e:
+        sys.stderr.write(str(e)+"\n")
+        help(error=True)
         sys.exit(2)
         
     if doDump:
@@ -942,7 +949,7 @@ if __name__ == '__main__':
     else:
         penData = parseHPGL(data, dpi=dpi)
     penData = removePenBob(penData)
-
+    
     if doDedup:
         penData = dedup(penData)
         
@@ -955,7 +962,7 @@ if __name__ == '__main__':
 
     if optimizationTime > 0.:
         for pen in penData:
-            penData[pen] = anneal.optimize(penData[pen], timeout=optimizationTime/2.)
+            penData[pen] = anneal.optimize(penData[pen], timeout=optimizationTime/2., quiet=quiet)
         penData = removePenBob(penData)
         
     if sortPaths:

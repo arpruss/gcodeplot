@@ -41,8 +41,7 @@
         <item value="center">center</item>
         <item value="top">right</item>
       </param>
-      <param name="boolean-extract-color" type="boolean" _gui-text="Extract one color from drawing" _gui-description="If enabled, only paths in the selected color are drawn.">0</param>
-      <param name="extract-color" type="color" _gui-text="Color to extract from drawing" _gui-description="If extract option is active, this selects the color to extract.">#000000</param>
+      <param name="extract-color" type="string" _gui-text="Extract one color from drawing" _gui-description="Put 'all' or leave blank to include all colors, red=#FF0000, green=#00FF00, blue=#0000FF."></param>
     </page>
     <page name="drawing" _gui-text="Drawing Settings">
       <param name="shading-threshold" type="float" min="0" max="1" precision="2" _gui-text="Shading threshold:" _gui-description="Shade whenever the shade is below this value, where 0=black and 1=white. To turn off shading, set to 0. (Default: 1, shade everything other than white).">1</param>
