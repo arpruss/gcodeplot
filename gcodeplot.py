@@ -345,7 +345,7 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
         
     def park():
         if not simulation:
-            gcode.append('G0 F%.1f Z%.3f; pen park !!Zpark' % (plotter.zSpeed*60., plotter.safeUpZ))
+            gcode.append('G0 F%.1f Z%.3f; pen park !!Zpark' % (plotter.zSpeed*60., plotter.safeDeltaZ))
 
     park()
     if not simulation:
@@ -928,7 +928,7 @@ if __name__ == '__main__':
             sys.exit(1)
         import gcodeplotutils.sendgcode as sendgcode
 
-        sendgcode.sendGcode(port=sendPort, speed=115200, commands=gcodeHeader(plotter) + [gcodePause], gcodePause=gcodePause, variables=variables, formulas=formulas)
+        sendgcode.sendGcode(port=sendPort, speed=sendSpeed, commands=gcodeHeader(plotter) + [gcodePause], gcodePause=gcodePause, variables=variables, formulas=formulas)
         sys.exit(0)
 
     with open(args[0]) as f:
@@ -988,9 +988,9 @@ if __name__ == '__main__':
         if sendPort is not None and not svgSimulation:
             import gcodeplotutils.sendgcode as sendgcode
             if hpglOut:
-                sendgcode.sendHPGL(port=sendPort, speed=115200, commands=g)
+                sendgcode.sendHPGL(port=sendPort, speed=sendSpeed, commands=g)
             else:
-                sendgcode.sendGcode(port=sendPort, speed=115200, commands=g, gcodePause=gcodePause, plotter=plotter, variables=variables, formulas=formulas)
+                sendgcode.sendGcode(port=sendPort, speed=sendSpeed, commands=g, gcodePause=gcodePause, plotter=plotter, variables=variables, formulas=formulas)
         else:    
             if hpglOut:
                 sys.stdout.write(g)
