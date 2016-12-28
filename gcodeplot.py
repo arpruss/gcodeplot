@@ -731,7 +731,7 @@ if __name__ == '__main__':
             elif opt in ('-t', '--tolerance'):
                 tolerance = float(arg)
             elif opt in ('-s', '--send'):
-                sendPort = arg
+                sendPort = None if len(arg.strip()) == 0 else arg
             elif opt == '--no-send':
                 sendPort = None
             elif opt in ('-S', '--send-speed'):

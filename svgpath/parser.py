@@ -534,6 +534,6 @@ def getPathsFromSVG(svg,yGrowsUp=True):
     return ( paths, applyMatrix(matrix, complex(viewBox[0], viewBox[1])), 
                 applyMatrix(matrix, complex(viewBox[2], viewBox[3])) )
 
-def getPathsFromSVGFile(filename,yGrowsUp=True):
+def getPathsFromSVGFile(filename,yGrowsUp=Truez):
     return getPathsFromSVG(ET.parse(filename).getroot(),yGrowsUp=yGrowsUp)
     

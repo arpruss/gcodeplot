@@ -11,7 +11,7 @@
         <item value="cut">cutting</item>
         <item value="custom">custom</item>
       </param>
-      <param name="tolerance" type="float" min="0.0001" max="10.0" precision="2" _gui-text="Precision (mm):" _gui-description="Set rendering precision (Default: 0.05)">0.05</param>
+      <param name="tolerance" type="float" min="0.0001" max="10.0" precision="3" _gui-text="Precision (mm):" _gui-description="Set rendering precision (Default: 0.05)">0.05</param>
       <param name="min-x" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Left x-coordinate (mm):" _gui-description="x-coordinate of the print area's left edge (Default: 0)">0</param>
       <param name="min-y" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Lower y-coordinate (mm):" _gui-description="y-coordinate of the print area's lower edge (Default: 0)">0</param>
       <param name="max-x" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Right x-coordinate (mm):" _gui-description="x-coordinate of the print area's right edge (Default: 200)">200</param>
@@ -22,6 +22,7 @@
       <param name="pen-up-speed" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Movement speed (mm/s):" _gui-description="Speed  moving with pen up (Default: 40)">40</param>
       <param name="pen-down-speed" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Draw speed (mm/s):" _gui-description="Speed moving with pen down (Default: 35)">35</param>
       <param name="z-speed" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Z-speed (mm/s):" _gui-description="Speed moving pen up/down (Default: 5)">5</param>
+      <param name="send" type="string" _gui-text="Serial port to send gcode to (blank not to send)" _gui-description="If you enter the name of your serial port here (e.g., COM4), then you can directly send the file to your device."></param>
     </page>
     <page name="fitting" _gui-text="Fitting and Extracting">
       <param name="scale" type="enum" _gui-text="Scaling mode:" _gui-description="Method for scaling to print area (Default: none; should be 'none' if tool-offset option is set in cutter tab)">

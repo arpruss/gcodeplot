@@ -1,9 +1,18 @@
 from __future__ import print_function
-import serial
 import time
 import os
 import re
 import sys
+try:
+    import serial
+except ImportError, e:
+    sys.stderr.write("""pyserial is not installed.
+You can download the pyserial .whl file from: http://pypi.python.org/pypi/pyserial
+Then rename it to .zip on Windows, and if you're using gcodeplot as an Inkscape extension, 
+put the "serial" subfolder from the zip in c:\Program Files\Inkscape\python\Lib\ or 
+c:\Program Files (x86)\Inkscape\python\Lib\
+""")
+    sys.exit(1)
 
 class FakeSerial(object):
     def __init__(self, name):
