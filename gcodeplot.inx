@@ -23,6 +23,22 @@
       <param name="pen-down-speed" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Draw speed (mm/s):" _gui-description="Speed moving with pen down (Default: 35)">35</param>
       <param name="z-speed" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Z-speed (mm/s):" _gui-description="Speed moving pen up/down (Default: 5)">5</param>
       <param name="send" type="string" _gui-text="Serial port to send gcode to (blank not to send)" _gui-description="If you enter the name of your serial port here (e.g., COM4), then you can directly send the file to your device."></param>
+      <param name="send-speed" type="enum" _gui-text="Serial baud rate:" _gui-description="Baud rate of your serial device (Default: 115200)">
+        <item value="115200">115200</item>
+        <item value="300">300</item>
+        <item value="600">600</item>
+        <item value="1200">1200</item>
+        <item value="2400">2400</item>
+        <item value="4800">4800</item>
+        <item value="9600">9600</item>
+        <item value="14400">14400</item>
+        <item value="19200">19200</item>
+        <item value="28800">28800</item>
+        <item value="38400">38400</item>
+        <item value="56000">56000</item>
+        <item value="57600">57600</item>
+        <item value="115200">115200</item>
+      </param>
     </page>
     <page name="fitting" _gui-text="Fitting and Extracting">
       <param name="scale" type="enum" _gui-text="Scaling mode:" _gui-description="Method for scaling to print area (Default: none; should be 'none' if tool-offset option is set in cutter tab)">
