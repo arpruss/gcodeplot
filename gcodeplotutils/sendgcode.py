@@ -4,15 +4,16 @@ import os
 import re
 import sys
 try:
-    import serial
-except ImportError, e:
-    sys.stderr.write("""pyserial is not installed.
-You can download the pyserial .whl file from: http://pypi.python.org/pypi/pyserial
-Then rename it to .zip on Windows, and if you're using gcodeplot as an Inkscape extension, 
-put the "serial" subfolder from the zip in c:\Program Files\Inkscape\python\Lib\ or 
-c:\Program Files (x86)\Inkscape\python\Lib\
-""")
-    sys.exit(1)
+    from serial import Serial
+except:
+    if sys.version_info < (2, 7):
+        dir = "pyserial27"
+    else:
+        dir = "pyserial3"
+    import inspect
+    serialFolder = os.path.abspath(os.path.split(inspect.getfile(inspect.currentframe()))[0] + "/" + dir)
+    sys.path.insert(0, serialFolder)
+    from serial import Serial
 
 class FakeSerial(object):
     def __init__(self, name):
@@ -41,7 +42,7 @@ def safeEval(string):
     return eval(string)
             
 def sendHPGL(port, commands):
-    s = serial.Serial(port, 115200)
+    s = Serial(port, 115200)
     s.flushInput()
     s.write(commands)
     s.close()
@@ -62,7 +63,7 @@ def sendGcode(port, commands, speed=115200, quiet = False, gcodePause="@pause", 
     if port.startswith('file:'):
         s = FakeSerial(port[5:])
     else:
-        s = serial.Serial(port, 115200)
+        s = Serial(port, 115200)
     s.flushInput()
     
     class State(object):

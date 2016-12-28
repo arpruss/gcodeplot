@@ -8,6 +8,9 @@ gcodeutils/OffsetProcessor.py:
     Copyright (C) 2008 Aaron Spike, aaron@ekips.org
     Copyright (C) 2013 Sebastian Wüst, sebi@timewaster.de
     Copyright (C) 2016 Alexander Pruss
+pyserial code:
+    Copyright (c) 2001-2016 Chris Liechti <cliechti@gmx.net>
+
     
                     GNU GENERAL PUBLIC LICENSE
                        Version 2, June 1991
