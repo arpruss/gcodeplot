@@ -664,6 +664,7 @@ if __name__ == '__main__':
     toolMode = "custom"
     booleanExtractColor = False
     quiet = False
+    sendAndSave = False
     
     try:
         opts, args = getopt.getopt(sys.argv[1:], "UR:Uhdulw:P:o:Oc:LT:M:m:A:XHrf:na:D:t:s:S:x:y:z:Z:p:f:F:", 
@@ -674,7 +675,7 @@ if __name__ == '__main__':
                         'shading-angle=', 'shading-crosshatch', 'no-shading-crosshatch', 'shading-avoid-outline', 
                         'pause-at-start', 'no-pause-at-start', 'min-x=', 'max-x=', 'min-y=', 'max-y=',
                         'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all', 'gcode-pause', 'dump-options', 'tab=', 'extract-color=', 'sort', 'no-sort', 'simulation', 'no-simulation', 'tool-offset=', 'overcut=', 
-                        'boolean-shading-crosshatch=', 'boolean-sort=', 'tool-mode=' ], )
+                        'boolean-shading-crosshatch=', 'boolean-sort=', 'tool-mode=', 'send-and-save=' ], )
 
         if len(args) + len(opts) == 0:
             raise getopt.GetoptError("invalid commandline")
@@ -732,6 +733,10 @@ if __name__ == '__main__':
                 tolerance = float(arg)
             elif opt in ('-s', '--send'):
                 sendPort = None if len(arg.strip()) == 0 else arg
+            elif opt == '--send-and-save':
+                sendPort = None if len(arg.strip()) == 0 else arg
+                if sendPort is not None:
+                    sendAndSave = True
             elif opt == '--no-send':
                 sendPort = None
             elif opt in ('-S', '--send-speed'):
@@ -985,17 +990,24 @@ if __name__ == '__main__':
                 plotter=plotter, gcodePause=gcodePause, pens=pens, pauseAtStart=pauseAtStart, simulation=svgSimulation)
 
     if g:
+        dump = True
+        
         if sendPort is not None and not svgSimulation:
             import gcodeplotutils.sendgcode as sendgcode
+            
+            dump = sendAndSave
+                    
             if hpglOut:
                 sendgcode.sendHPGL(port=sendPort, speed=sendSpeed, commands=g)
             else:
                 sendgcode.sendGcode(port=sendPort, speed=sendSpeed, commands=g, gcodePause=gcodePause, plotter=plotter, variables=variables, formulas=formulas)
-        else:    
+        
+        if dump:
             if hpglOut:
                 sys.stdout.write(g)
             else:
                 print('\n'.join(g))
+    
     else:
         sys.stderr.write("No points.")
         sys.exit(1)
