@@ -543,15 +543,17 @@ def parseSVG(svgTree, tolerance=0.05, shader=None, strokeAll=False, pens=None, e
         
         stroke = strokeAll or (path.svgState.stroke is not None and (extractColor is None or isSameColor(path.svgState.stroke, extractColor)))
         
-        pen = getPen(pens, path.svgState.stroke)
+        strokePen = getPen(pens, path.svgState.stroke)
 
-        if pen not in data:
-            data[pen] = []
+        if strokePen not in data:
+            data[strokePen] = []
             
         for line in path.linearApproximation(error=tolerance):
             if stroke:
-                data[pen].append([(line.start.real,line.start.imag),(line.end.real,line.end.imag)])
+                data[strokePen].append([(line.start.real,line.start.imag),(line.end.real,line.end.imag)])
             lines.append((line.start, line.end))
+        if not data[strokePen]:
+            del data[strokePen]
 
         if shader is not None and shader.isActive() and path.svgState.fill is not None and (extractColor is None or
                 isSameColor(path.svgStatefill, extractColor)):
@@ -564,9 +566,12 @@ def parseSVG(svgTree, tolerance=0.05, shader=None, strokeAll=False, pens=None, e
             mode = Shader.MODE_NONZERO if path.svgState.fillRule == 'nonzero' else Shader.MODE_EVEN_ODD
             if path.svgState.fillOpacity is not None:
                 grayscale = grayscale * path.svgState.fillOpacity + 1. - path.svgState.fillOpacity # TODO: real alpha!
-            fillLines = shader.shade(lines, grayscale, avoidOutline=(path.svgState.stroke is None), mode=mode)
+            fillLines = shader.shade(lines, grayscale, avoidOutline=(path.svgState.stroke is None or strokePen != pen), mode=mode)
             for line in fillLines:
                 data[pen].append([(line[0].real,line[0].imag),(line[1].real,line[1].imag)])
+                
+            if not data[pen]:
+                del data[pen]
 
     return data
     
