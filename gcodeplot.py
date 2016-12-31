@@ -596,6 +596,39 @@ def getConfigOpts(filename):
                 opts.append( (opt,arg) )
     return opts
     
+def directionalize(paths, angle):
+    vector = (math.cos(angle * math.pi / 180.), math.sin(angle * math.pi / 180.))
+    
+    outPaths = []
+    for path in paths:
+        startIndex = 0
+        prevPoint = path[0]
+        canBeForward = True
+        canBeReversed = True
+        i = 1
+        while i < len(path):
+            curVector = (path[i][0]-prevPoint[0],path[i][1]-prevPoint[1])
+            if curVector[0] or curVector[1]:
+                dotProduct = curVector[0]*vector[0] + curVector[1]*vector[1]
+                if dotProduct > 0 and not canBeForward:
+                    outPaths.append(list(reversed(path[startIndex:i])))
+                    startIndex = i-1
+                    canBeForward = True
+                    canBeReversed = False
+                elif dotProduct < 0 and not canBeReversed:
+                    outPaths.append(path[startIndex:i])
+                    startIndex = i-1
+                    canBeForward = False
+                    canBeReversed = True
+                prevPoint = path[i]
+            i += 1
+        if canBeForward:
+            outPaths.append(path[startIndex:i])
+        else:
+            outPaths.append(list(reversed(path[startIndex:i])))
+            
+    return outPaths
+                    
 if __name__ == '__main__':
 
     def help(error=False):
@@ -980,7 +1013,7 @@ if __name__ == '__main__':
         for pen in penData:
             penData[pen] = op.processPath(penData[pen])
 
-    if optimizationTime > 0.:
+    if optimizationTime > 0. and directionAngle is None:
         for pen in penData:
             penData[pen] = anneal.optimize(penData[pen], timeout=optimizationTime/2., quiet=quiet)
         penData = removePenBob(penData)
@@ -988,6 +1021,11 @@ if __name__ == '__main__':
     if sortPaths:
         for pen in penData:
             penData[pen] = safeSorted(penData[pen], comparison=comparePaths)
+        penData = removePenBob(penData)
+        
+    if directionAngle is not None:
+        for pen in penData:
+            penData[pen] = directionalize(penData[pen], directionAngle)
         penData = removePenBob(penData)
         
     if len(penData) > 1:
