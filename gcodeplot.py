@@ -596,7 +596,7 @@ def getConfigOpts(filename):
                 opts.append( (opt,arg) )
     return opts
     
-def directionalize(paths, angle):
+def directionalize(paths, angle, tolerance=1e-10):
     vector = (math.cos(angle * math.pi / 180.), math.sin(angle * math.pi / 180.))
     
     outPaths = []
@@ -610,16 +610,18 @@ def directionalize(paths, angle):
             curVector = (path[i][0]-prevPoint[0],path[i][1]-prevPoint[1])
             if curVector[0] or curVector[1]:
                 dotProduct = curVector[0]*vector[0] + curVector[1]*vector[1]
-                if dotProduct > 0 and not canBeForward:
-                    outPaths.append(list(reversed(path[startIndex:i])))
-                    startIndex = i-1
-                    canBeForward = True
+                if dotProduct > tolerance:
+                    if not canBeForward:
+                        outPaths.append(list(reversed(path[startIndex:i])))
+                        startIndex = i-1
+                        canBeForward = True
                     canBeReversed = False
-                elif dotProduct < 0 and not canBeReversed:
-                    outPaths.append(path[startIndex:i])
-                    startIndex = i-1
+                elif dotProduct < -tolerance:
+                    if not canBeReversed:
+                        outPaths.append(path[startIndex:i])
+                        startIndex = i-1
+                        canBeReversed = True
                     canBeForward = False
-                    canBeReversed = True
                 prevPoint = path[i]
             i += 1
         if canBeForward:

@@ -34,7 +34,7 @@ class Shader(object):
             return []
         intensity = (self.unshadedThreshold-grayscale) / float(self.unshadedThreshold)
         spacing = self.lightestSpacing * (1-intensity) + self.darkestSpacing * intensity
-        lines = Shader.shadePolygon(polygon, self.angle, spacing, avoidOutline=avoidOutline, mode=mode)
+        lines = Shader.shadePolygon(polygon, self.angle, spacing, avoidOutline=avoidOutline, mode=mode, alternate=(self.drawingDirectionAngle is None))
         if self.crossHatch:
             lines += Shader.shadePolygon(polygon, self.angle+90, spacing, avoidOutline=avoidOutline, mode=mode, alternate=(self.drawingDirectionAngle is None))
         return lines
