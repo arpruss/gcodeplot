@@ -10,10 +10,22 @@ class Shader(object):
         self.lightestSpacing = lightestSpacing
         self.darkestSpacing = darkestSpacing
         self.angle = angle
+        self.secondaryAngle = angle + 90
         self.crossHatch = False
         
     def isActive(self):
         return self.unshadedThreshold > 0.000001
+        
+    def setDrawingDirectionAngle(self, drawingDirectionAngle):
+        self.drawingDirectionAngle = drawingDirectionAngle
+        
+        if drawingDirectionAngle is None:
+            return
+            
+        if 90 < (self.angle - drawingDirectionAngle) % 360 < 270:
+            self.angle = (self.angle + 180) % 360
+        if 90 < (self.secondaryAngle - drawingDirectionAngle) % 360 < 270:
+            self.secondaryAngle = (self.secondaryAngle + 180) % 360
         
     def shade(self, polygon, grayscale, avoidOutline=True, mode=None):
         if mode is None:
@@ -24,11 +36,11 @@ class Shader(object):
         spacing = self.lightestSpacing * (1-intensity) + self.darkestSpacing * intensity
         lines = Shader.shadePolygon(polygon, self.angle, spacing, avoidOutline=avoidOutline, mode=mode)
         if self.crossHatch:
-            lines += Shader.shadePolygon(polygon, self.angle+90, spacing, avoidOutline=avoidOutline, mode=mode)
+            lines += Shader.shadePolygon(polygon, self.angle+90, spacing, avoidOutline=avoidOutline, mode=mode, alternate=(self.drawingDirectionAngle==None))
         return lines
         
     @staticmethod
-    def shadePolygon(polygon, angleDegrees, spacing, avoidOutline=True, mode=None):
+    def shadePolygon(polygon, angleDegrees, spacing, avoidOutline=True, mode=None, alternate=True):
         if mode is None:
             mode = Shader.MODE_EVEN_ODD
     
@@ -102,7 +114,7 @@ class Shader(object):
             else:
                 raise ValueError()
                    
-            if odd:
+            if odd and alternate:
                 thisLine = list(reversed([(l[1],l[0]) for l in thisLine]))
                 
             if not avoidOutline and len(thisLine) and len(all) and all[-1][1][2] == thisLine[0][0][2]:

@@ -670,9 +670,10 @@ if __name__ == '__main__':
     booleanExtractColor = False
     quiet = False
     sendAndSave = False
+    directionAngle = None
     
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "UR:Uhdulw:P:o:Oc:LT:M:m:A:XHrf:na:D:t:s:S:x:y:z:Z:p:f:F:", 
+        opts, args = getopt.getopt(sys.argv[1:], "e:UR:Uhdulw:P:o:Oc:LT:M:m:A:XHrf:na:D:t:s:S:x:y:z:Z:p:f:F:", 
                         ["help", "down", "up", "lower-left", "allow-repeats", "no-allow-repeats", "scale=", "config-file=",
                         "area=", 'align-x=', 'align-y=', 'optimization-time=', "pens=",
                         'input-dpi=', 'tolerance=', 'send=', 'send-speed=', 'work-z=', 'lift-delta-z=', 'safe-delta-z=',
@@ -680,7 +681,7 @@ if __name__ == '__main__':
                         'shading-angle=', 'shading-crosshatch', 'no-shading-crosshatch', 'shading-avoid-outline', 
                         'pause-at-start', 'no-pause-at-start', 'min-x=', 'max-x=', 'min-y=', 'max-y=',
                         'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all', 'gcode-pause', 'dump-options', 'tab=', 'extract-color=', 'sort', 'no-sort', 'simulation', 'no-simulation', 'tool-offset=', 'overcut=', 
-                        'boolean-shading-crosshatch=', 'boolean-sort=', 'tool-mode=', 'send-and-save=' ], )
+                        'boolean-shading-crosshatch=', 'boolean-sort=', 'tool-mode=', 'send-and-save=', 'direction=' ], )
 
         if len(args) + len(opts) == 0:
             raise getopt.GetoptError("invalid commandline")
@@ -826,13 +827,13 @@ if __name__ == '__main__':
                 sys.exit(0)
             elif opt == '--dump-options':
                 doDump = True
-            elif opt in ('R', '--extract-color'):
+            elif opt in ('-R', '--extract-color'):
                 arg = arg.lower()
                 if arg == 'all' or len(arg.strip())==0:
                     extractColor = None
                 else:
                     extractColor = parser.rgbFromColor(arg)
-            elif opt in ('d', '--sort'):
+            elif opt in ('-d', '--sort'):
                 sortPaths = True
                 optimizationTime = 0
             elif opt == '--no-sort':
@@ -845,6 +846,11 @@ if __name__ == '__main__':
                 quiet = True # Inkscape
             elif opt == "--tool-mode":
                 toolMode = arg
+            elif opt in ('e', '--direction'):
+                if len(arg.strip()) == 0 or arg == 'none':
+                    directionAngle = None
+                else:
+                    directionAngle = float(arg)
             else:
                 raise ValueError("Unrecognized argument "+opt)
             i += 1
@@ -956,7 +962,8 @@ if __name__ == '__main__':
     if svgTree is None and 'PD' not in data and 'PU' not in data:
         sys.stderr.write("Unrecognized file.\n")
         exit(1)
-        
+
+    shader.setDrawingDirectionAngle(directionAngle)
     if svgTree is not None:
         penData = parseSVG(svgTree, tolerance=tolerance, shader=shader, strokeAll=strokeAll, pens=pens, extractColor=extractColor)
     else:
