@@ -665,6 +665,7 @@ if __name__ == '__main__':
  -L|--stroke-all*: stroke even regions specified by SVG to have no stroke
  -O|--shading-avoid-outline*: avoid going over outline twice when shading
  -o|--optimization-time=t: max time to spend optimizing (seconds; set to 0 to turn off optimization) [default 60]
+ -e|--direction=angle: for slanted pens: prefer to draw in given direction (degrees; 0=positive x, 90=positive y, none=no preferred direction) [default none]
  -d|--sort*: sort paths from inside to outside for cutting [default off]
  -c|--config-file=filename: read arguments, one per line, from filename
  -w|--gcode-pause=cmd: gcode pause command [default: @pause]
@@ -955,6 +956,7 @@ if __name__ == '__main__':
         print('tool-offset=%.3f' % toolOffset)
         print('overcut=%.3f' % overcut)
         print('simulation' if svgSimulation else 'no-simulation')
+        print('direction=' + ('none' if directionAngle is None else '%.3f'%directionAngle))
         
         sys.exit(0)
         
