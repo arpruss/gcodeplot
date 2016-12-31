@@ -70,9 +70,13 @@
       <param name="direction" type="enum" _gui-text="Preferred drawing direction (degrees):" _gui-description="If specified, the plotter will avoid moving against this direction. Currently not compatible with optimization. (Default: none)">
         <item value="none">none</item>
         <item value="0">0 (positive x)</item>
+        <item value="45">45</item>
         <item value="90">90 (positive y)</item>
+        <item value="135">45</item>
         <item value="180">180 (negative x)</item>
+        <item value="225">225</item>
         <item value="270">270 (negative y)</item>
+        <item value="315">315</item>
       </param>
     </page>
     <page name="cutting" _gui-text="Cutting Settings">
