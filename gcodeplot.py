@@ -964,6 +964,7 @@ if __name__ == '__main__':
         shader.unshadedThreshold = 0
         optimizationTime = 0
         sortPaths = True
+        directionAngle = None
     elif toolMode == 'draw':
         toolOffset = 0.
         sortPaths = False
