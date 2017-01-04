@@ -345,7 +345,7 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
         
     def park():
         if not simulation:
-            gcode.append('G0 F%.1f Z%.3f; pen park !!Zpark' % (plotter.zSpeed*60., plotter.safeDeltaZ))
+            gcode.append('G0 F%.1f Z%.3f; pen park !!Zpark' % (plotter.zSpeed*60., plotter.safeUpZ))
 
     park()
     if not simulation:
