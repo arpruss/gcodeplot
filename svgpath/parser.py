@@ -514,10 +514,10 @@ def getPathsFromSVG(svg,yGrowsUp=True):
         
     paths = []
     
-    width = sizeFromString(svg.attrib['width'])
-    height = sizeFromString(svg.attrib['height'])
+    width = sizeFromString(svg.attrib['width'].strip())
+    height = sizeFromString(svg.attrib['height'].strip())
     try:
-        viewBox = list(map(float, re.split(r'[\s,]+', svg.attrib['viewBox'])))
+        viewBox = list(map(float, re.split(r'[\s,]+', svg.attrib['viewBox'].strip())))
     except KeyError:
         viewBox = [0, 0, width*96/25.4, height*96/25.4]
     
