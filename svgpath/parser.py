@@ -497,6 +497,7 @@ def getPathsFromSVG(svg,yGrowsUp=True):
         state = updateState(tree, state, matrix)
         if tag == 'path':
             svgState = updateState(tree, state, matrix)
+            matrix = updateMatrix(tree, matrix)
             path = parse_path(tree.attrib['d'], matrix=matrix, svgState=svgState)
             paths.append(path)
         elif tag == 'g' or tag == 'svg':
