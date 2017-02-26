@@ -562,6 +562,9 @@ def getPathsFromSVG(svg,yGrowsUp=True):
         viewBox = list(map(float, re.split(r'[\s,]+', svg.attrib['viewBox'].strip())))
     except KeyError:
         viewBox = [0, 0, width*96/25.4, height*96/25.4]
+        
+    viewBox[2] += viewBox[0]
+    viewBox[3] += viewBox[1]
     
     matrix = [ width/(viewBox[2]-viewBox[0]), 0, -viewBox[0]* width/(viewBox[2]-viewBox[0]), 0 ] 
     if yGrowsUp:
