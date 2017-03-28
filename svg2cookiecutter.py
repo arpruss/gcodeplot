@@ -105,8 +105,8 @@ def svgToCookieCutter(filename, tolerance=0.1, strokeAll = False):
                 
             lines = path.linearApproximation(error=tolerance)
             
-            line.points = [(l.start.real,l.start.imag) for l in lines]
-            line.points.append((lines[-1].end.real, lines[-1].end.imag))
+            line.points = [(-l.start.real,l.start.imag) for l in lines]
+            line.points.append((-lines[-1].end.real, lines[-1].end.imag))
             
             for i in range(2):
                 minXY[i] = min(minXY[i], min(p[i] for p in line.points))
