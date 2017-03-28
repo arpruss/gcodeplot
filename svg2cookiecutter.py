@@ -38,19 +38,20 @@ module cookieCutter() {
 """
 
 class Line(object):
-    def __init__(self, height="featureHeight", width="0.5", base=False, wall=False, insideWall=False):
+    def __init__(self, height="featureHeight", width="0.5", base=False, wall=False, insideWall=False, stroke=False):
         self.height = height
         self.width = width
         self.base = base
         self.wall = wall
         self.insideWall = insideWall
+        self.stroke = stroke
         self.points = []
         
     def toCode(self, pathCount):
         code = []
         path = 'path'+str(pathCount)
         code.append( path + '=scale*[' + ','.join(('[%.3f,%.3f]'%tuple(p) for p in self.points)) + '];' );
-        if not self.base:
+        if self.stroke:
             code.append('render(convexity=10) linear_extrude(height=('+self.height+')) ribbon('+path+',thickness='+self.width+');')
             if self.wall:
                 baseRibbon = 'render(convexity=10) linear_extrude(height=wallFlareThickness) ribbon('+path+',thickness=wallFlareWidth);'
@@ -64,7 +65,7 @@ class Line(object):
                 code.append(' ' + baseRibbon);
                 code.append(' translate([0,0,-0.01]) linear_extrude(height=insideWallFlareThickness+0.02) polygon(points='+path+');')
                 code.append('}')
-        else:
+        if self.base:
             code.append('render(convexity=10) linear_extrude(height=connectorThickness) polygon(points='+path+');')
         return code
         
@@ -84,10 +85,14 @@ def svgToCookieCutter(filename, tolerance=0.1, strokeAll = False):
         for path in superpath.breakup():
             line = Line()
             
+            line.base = False
+            line.stroke = False
+            
             if path.svgState.fill is not None:
                 line.base = True
-            elif strokeAll or path.svgState.stroke is not None:
-                line.base = False
+
+            if strokeAll or path.svgState.stroke is not None:
+                line.stroke = True
                 if isRed(path.svgState.stroke):
                     line.width = "min(maxWallWidth,max(%.3f,minWallWidth))" % path.svgState.strokeWidth
                     line.height = "wallHeight"
@@ -100,7 +105,7 @@ def svgToCookieCutter(filename, tolerance=0.1, strokeAll = False):
                     line.width = "min(maxFeatureThickness,max(%.3f,minFeatureThickness))" % path.svgState.strokeWidth
                     line.height = "featureHeight"
                     line.wall = False
-            else:
+            elif not line.base:
                 continue
                 
             lines = path.linearApproximation(error=tolerance)
