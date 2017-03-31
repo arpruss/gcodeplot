@@ -229,18 +229,21 @@ class QuadraticBezier(Segment):
         return s
 
 class Arc(Segment):
-    def __init__(self, start, radius, rotation, arc, sweep, end):
+    def __init__(self, start, radius, rotation, arc, sweep, end, scaler=lambda z:z):
         """radius is complex, rotation is in degrees,
            large and sweep are 1 or 0 (True/False also work)"""
 
-        super(Arc, self).__init__(start,end)
+        super(Arc, self).__init__(scaler(start),scaler(end))
+        self.start0 = start
+        self.end0 = end
         self.radius = radius
         self.rotation = rotation
         self.arc = bool(arc)
         self.sweep = bool(sweep)
+        self.scaler = scaler
 
         self._parameterize()
-
+        
     def __repr__(self):
         return 'Arc(start=%s, radius=%s, rotation=%s, arc=%s, sweep=%s, end=%s)' % (
                self.start, self.radius, self.rotation, self.arc, self.sweep, self.end)
@@ -263,8 +266,8 @@ class Arc(Segment):
 
         cosr = cos(radians(self.rotation))
         sinr = sin(radians(self.rotation))
-        dx = (self.start.real - self.end.real) / 2
-        dy = (self.start.imag - self.end.imag) / 2
+        dx = (self.start0.real - self.end0.real) / 2
+        dy = (self.start0.imag - self.end0.imag) / 2
         x1prim = cosr * dx + sinr * dy
         x1prim_sq = x1prim * x1prim
         y1prim = -sinr * dx + cosr * dy
@@ -293,9 +296,9 @@ class Arc(Segment):
         cyprim = -c * ry * x1prim / rx
 
         self.center = complex((cosr * cxprim - sinr * cyprim) +
-                              ((self.start.real + self.end.real) / 2),
+                              ((self.start0.real + self.end0.real) / 2),
                               (sinr * cxprim + cosr * cyprim) +
-                              ((self.start.imag + self.end.imag) / 2))
+                              ((self.start0.imag + self.end0.imag) / 2))
 
         ux = (x1prim - cxprim) / rx
         uy = (y1prim - cyprim) / ry
@@ -323,7 +326,7 @@ class Arc(Segment):
         self.delta = delta % 360
         if not self.sweep:
             self.delta -= 360
-
+            
     def point(self, pos):
         if pos == 0.:
             return self.start
@@ -337,7 +340,7 @@ class Arc(Segment):
              self.radius.imag + self.center.real)
         y = (sinr * cos(angle) * self.radius.real + cosr * sin(angle) *
              self.radius.imag + self.center.imag)
-        return complex(x, y)
+        return self.scaler(complex(x, y))
 
     def length(self, error=ERROR, min_depth=MIN_DEPTH):
         """The length of an elliptical arc segment requires numerical

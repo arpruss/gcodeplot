@@ -358,11 +358,11 @@ def parse_path(pathdef, current_pos=0j, matrix = None, svgState=None):
             arc = float(elements.pop())
             sweep = float(elements.pop())
             end = float(elements.pop()) + float(elements.pop()) * 1j
-
+           
             if not absolute:
                 end += current_pos
 
-            segments.append(path.Arc(scaler(current_pos), scaler(radius)-scaler(0j), rotation, arc, sweep, scaler(end)))
+            segments.append(path.Arc(current_pos, radius, rotation, arc, sweep, end, scaler))
             current_pos = end
 
     return segments
@@ -637,8 +637,6 @@ def getPathsFromSVG(svg,yGrowsUp=True):
     
     getPaths(paths, matrix, svg, path.SVGState(), {})
 
-    scaler = lambda z : applyMatrix(matrix, z)
-    
     return ( paths, applyMatrix(matrix, complex(viewBox[0], viewBox[1])), 
                 applyMatrix(matrix, complex(viewBox[2], viewBox[3])) )
 
