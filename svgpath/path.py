@@ -245,8 +245,8 @@ class Arc(Segment):
         self._parameterize()
         
     def __repr__(self):
-        return 'Arc(start=%s, radius=%s, rotation=%s, arc=%s, sweep=%s, end=%s)' % (
-               self.start, self.radius, self.rotation, self.arc, self.sweep, self.end)
+        return 'Arc(start0=%s, radius=%s, rotation=%s, arc=%s, sweep=%s, end0=%s, scaler=%s)' % (
+               self.start0, self.radius, self.rotation, self.arc, self.sweep, self.end0, self.scaler)
 
     def __eq__(self, other):
         if not isinstance(other, Arc):
