@@ -618,13 +618,28 @@ def getPathsFromSVG(svg,yGrowsUp=True):
         return complex(x,y)
         
     paths = []
+
+    try:
+        width = sizeFromString(svg.attrib['width'].strip())
+    except KeyError:
+        width = None
+    try:
+        height = sizeFromString(svg.attrib['height'].strip())
+    except KeyError:
+        height = None
     
-    width = sizeFromString(svg.attrib['width'].strip())
-    height = sizeFromString(svg.attrib['height'].strip())
     try:
         viewBox = list(map(float, re.split(r'[\s,]+', svg.attrib['viewBox'].strip())))
     except KeyError:
+        if width is None or height is None:
+            raise KeyError
         viewBox = [0, 0, width*96/25.4, height*96/25.4]
+        
+    if width is None:
+        width = viewBox[2] * 25.4/96
+    
+    if height is None:
+        height = viewBox[3] * 25.4/96
         
     viewBox[2] += viewBox[0]
     viewBox[3] += viewBox[1]
