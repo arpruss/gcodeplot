@@ -23,7 +23,7 @@ ALIGN_RIGHT = ALIGN_TOP
 ALIGN_CENTER = 3
 
 class Plotter(object):
-    def __init__(self, xyMin=(10,8), xyMax=(192,150), 
+    def __init__(self, xyMin=(7,8), xyMax=(204,178), 
             drawSpeed=35, moveSpeed=40, zSpeed=5, workZ = 14.5, liftDeltaZ = 2.5, safeDeltaZ = 20):
         self.xyMin = xyMin
         self.xyMax = xyMax
