@@ -30,6 +30,28 @@ module ribbon(points, thickness=1) {
     }
 }
 
+module wall(path,height,thickness) {
+  render(convexity=10) linear_extrude(height=height) ribbon(path,thickness=thickness);
+}
+
+module outerFlare(path) {
+  difference() {
+    render(convexity=10) linear_extrude(height=wallFlareThickness) ribbon(path,thickness=wallFlareWidth);
+    translate([0,0,-0.01]) linear_extrude(height=wallFlareThickness+0.02) polygon(points=path);
+  }
+}
+
+module innerFlare(path) {
+  intersection() {
+    render(convexity=10) linear_extrude(height=insideWallFlareThickness) ribbon(path,thickness=insideWallFlareWidth);
+    translate([0,0,-0.01]) linear_extrude(height=insideWallFlareThickness+0.02) polygon(points=path);
+  }
+}
+
+module connector(path) {
+  render(convexity=10) linear_extrude(height=connectorThickness) polygon(points=path);
+}
+
 module cookieCutter() {
 """
 
@@ -48,21 +70,14 @@ class Line(object):
         path = 'path'+str(pathCount)
         code.append( path + '=scale*[' + ','.join(('[%.3f,%.3f]'%tuple(p) for p in self.points)) + '];' );
         if self.stroke:
-            code.append('render(convexity=10) linear_extrude(height=('+self.height+')) ribbon('+path+',thickness='+self.width+');')
+            code.append('wall('+path+','+self.height+','+self.width+');')
             if self.wall:
-                baseRibbon = 'render(convexity=10) linear_extrude(height=wallFlareThickness) ribbon('+path+',thickness=wallFlareWidth);'
-                code.append('difference() {')
-                code.append(' ' + baseRibbon);
-                code.append(' translate([0,0,-0.01]) linear_extrude(height=wallFlareThickness+0.02) polygon(points='+path+');')
-                code.append('}')
+                code.append('outerFlare('+path+');')
             elif self.insideWall:
-                baseRibbon = 'render(convexity=10) linear_extrude(height=insideWallFlareThickness) ribbon('+path+',thickness=insideWallFlareWidth);'
-                code.append('intersection() {')
-                code.append(' ' + baseRibbon);
-                code.append(' translate([0,0,-0.01]) linear_extrude(height=insideWallFlareThickness+0.02) polygon(points='+path+');')
-                code.append('}')
+                code.append('innerFlare('+path+');')
         if self.base:
-            code.append('render(convexity=10) linear_extrude(height=connectorThickness) polygon(points='+path+');')
+            code.append('connector('+path+');')
+        code.append('') # will add a newline
         return code
         
 def isRed(rgb):
