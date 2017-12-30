@@ -134,7 +134,7 @@ def svgToCookieCutter(filename, tolerance=0.1, strokeAll = False):
     size = max(maxXY[0]-minXY[0], maxXY[1]-minXY[1])
     
     code.append('}\n')
-    code.append('translate([%.3f*scale,%.3f*scale,0]) cookieCutter();' % (-minXY[0],-minXY[1]))
+    code.append('translate([%.3f*scale + wallFlareWidth/2,  %.3f*scale + wallFlareWidth/2,0]) cookieCutter();' % (-minXY[0],-minXY[1]))
             
     return '\n'.join(code).replace('$OVERALL_SIZE$', '%.3f' % size)
     
