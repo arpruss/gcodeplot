@@ -432,7 +432,7 @@ def rgbFromColor(colorName):
         return SVG_COLORS[colorName]        
         
         
-def getPathsFromSVG(svg,yGrowsUp=True):
+def getPathsFromSVG(svg):
     def updateStateCommand(state,cmd,arg):
         if cmd == 'fill':
             state.fill = rgbFromColor(arg)
@@ -611,10 +611,7 @@ def getPathsFromSVG(svg,yGrowsUp=True):
 
     def scale(width, height, viewBox, z):
         x = (z.real - viewBox[0]) / (viewBox[2] - viewBox[0]) * width
-        if yGrowsUp:
-            y = (viewBox[3]-z.imag) / (viewBox[3] - viewBox[1]) * height
-        else:
-            y = (z.imag - viewBox[1]) / (viewBox[3] - viewBox[1]) * height
+        y = (viewBox[3]-z.imag) / (viewBox[3] - viewBox[1]) * height
         return complex(x,y)
         
     paths = []
@@ -641,20 +638,61 @@ def getPathsFromSVG(svg,yGrowsUp=True):
     if height is None:
         height = viewBox[3] * 25.4/96
         
+    viewBoxWidth = viewBox[2]
+    viewBoxHeight = viewBox[3]
+    
     viewBox[2] += viewBox[0]
     viewBox[3] += viewBox[1]
     
-    matrix = [ width/(viewBox[2]-viewBox[0]), 0, -viewBox[0]* width/(viewBox[2]-viewBox[0]), 0 ] 
-    if yGrowsUp:
-        matrix += [-height/(viewBox[3]-viewBox[1]), viewBox[3]*height/(viewBox[3]-viewBox[1]) ]
-    else:
-        matrix += [height/(viewBox[3]-viewBox[1]), -viewBox[1]*height/(viewBox[3]-viewBox[1]) ]
-    
+    try:
+        preserve = svg.attrib['preserveAspectRatio'].strip().lower().split()
+        if len(preserve[0]) != 8:
+            raise KeyError
+        if len(preserve)>=2 and preserve[1] == 'slice':
+            if viewBoxWidth/viewBoxHeight > width/height:
+                # viewbox is wider than viewport, so scale by height to ensure
+                # viewbox covers the viewport
+                rescale = height / viewBoxHeight
+            else:
+                rescale = width / viewBoxWidth
+        else:
+            if viewBoxWidth/viewBoxHeight > width/height:
+                # viewbox is wider than viewport, so scale by width to ensure
+                # viewport covers the viewbox
+                rescale = width / viewBoxWidth
+            else:
+                rescale = height / viewBoxHeight
+        matrix = [rescale, 0, 0,    
+                  0, rescale, 0];
+
+        if preserve[0][0:4] == 'xmin':
+            # viewBox[0] to 0
+            matrix[2] = -viewBox[0] * rescale
+        elif preserve[0][0:4] == 'xmid':
+            # viewBox[0] to width/2
+            matrix[2] = -viewBox[0] * rescale + width/2
+        else: # preserve[0][0:4] == 'xmax':
+            # viewBox[0] to width
+            matrix[2] = -viewBox[0] * rescale + width
+        
+        if preserve[0][4:8] == 'ymin':
+            # viewBox[1] to 0
+            matrix[5] = -viewBox[1] * rescale
+        elif preserve[0][4:8] == 'ymid':
+            # viewBox[0] to width/2
+            matrix[5] = -viewBox[1] * rescale + height/2
+        else: # preserve[0][4:8] == 'xmax':
+            # viewBox[0] to width
+            matrix[5] = -viewBox[1] * rescale + height
+    except:
+        matrix = [ width/viewBoxWidth, 0, -viewBox[0]* width/viewBoxWidth,  
+                   0, -height/viewBoxHeight, viewBox[3]*height/viewBoxHeight ]
+        
     getPaths(paths, matrix, svg, path.SVGState(), {})
 
     return ( paths, applyMatrix(matrix, complex(viewBox[0], viewBox[1])), 
                 applyMatrix(matrix, complex(viewBox[2], viewBox[3])) )
 
-def getPathsFromSVGFile(filename,yGrowsUp=True):
-    return getPathsFromSVG(ET.parse(filename).getroot(),yGrowsUp=yGrowsUp)
+def getPathsFromSVGFile(filename):
+    return getPathsFromSVG(ET.parse(filename).getroot())
     
