@@ -17,18 +17,14 @@ maxFeatureThickness = 3;
 connectorThickness = 1;
 size = $OVERALL_SIZE$;
 
-module dummy() {}
-
 scale = size/$OVERALL_SIZE$;
 
-module ribbon(points, thickness=1, closed=false) {
-    p = closed ? concat(points, [points[0]]) : points;
-    
+module ribbon(points, thickness=1) {
     union() {
-        for (i=[1:len(p)-1]) {
+        for (i=[1:len(points)-1]) {
             hull() {
-                translate(p[i-1]) circle(d=thickness, $fn=8);
-                translate(p[i]) circle(d=thickness, $fn=8);
+                translate(points[i-1]) circle(d=thickness, $fn=8);
+                translate(points[i]) circle(d=thickness, $fn=8);
             }
         }
     }
