@@ -199,8 +199,8 @@ def comparePaths(path1,path2,tolerance=0.05,pointsToCheck=3):
                 xIntercept = p2.real - reciprocalSlope * p2.imag
                 if xIntercept == 0:
                     return False # on boundary
-                if xIntercept > 0:
-                    if p1.imag < p2.imag:
+                if p1.imag * p2.imag < 0 and xIntercept > 0:
+                    if p1.imag < 0:
                         s += 1
                     else:
                         s -= 1
