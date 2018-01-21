@@ -732,7 +732,7 @@ if __name__ == '__main__':
     toolMode = "custom"
     booleanExtractColor = False
     quiet = False
-    comments = ";"
+    comment = ";"
     sendAndSave = False
     directionAngle = None
     
@@ -985,7 +985,7 @@ if __name__ == '__main__':
         print('overcut=%.3f' % overcut)
         print('simulation' if svgSimulation else 'no-simulation')
         print('direction=' + ('none' if directionAngle is None else '%.3f'%directionAngle))
-        print('comments=' + comments)
+        print('comment=' + comment)
         
         sys.exit(0)
         
@@ -1090,7 +1090,7 @@ if __name__ == '__main__':
             if hpglOut:
                 sys.stdout.write(g)
             else:
-                print('\n'.join(fixComments(plotter, g, comments=comments)))
+                print('\n'.join(fixComments(plotter, g, comment=comment)))
     
     else:
         sys.stderr.write("No points.")
