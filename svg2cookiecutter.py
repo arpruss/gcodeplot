@@ -94,7 +94,7 @@ def svgToCookieCutter(filename, tolerance=0.1, strokeAll = False):
             
             if path.svgState.fill is not None:
                 line.base = True
-                if isGreen(path.svgState.fill):
+                if isGreen(path.svgState.fill) or isRed(path.svgState.fill):
                     line.baseHeight = "wallHeight"
                 elif isBlack(path.svgState.fill):
                     line.baseHeight = "featureHeight"
