@@ -24,7 +24,8 @@ ALIGN_CENTER = 3
 
 class Plotter(object):
     def __init__(self, xyMin=(7,8), xyMax=(204,178), 
-            drawSpeed=35, moveSpeed=40, zSpeed=5, workZ = 14.5, liftDeltaZ = 2.5, safeDeltaZ = 20):
+            drawSpeed=35, moveSpeed=40, zSpeed=5, workZ = 14.5, liftDeltaZ = 2.5, safeDeltaZ = 20,
+            liftCommand=None, safeLiftCommand=None, downCommand=None, comment=";"):
         self.xyMin = xyMin
         self.xyMax = xyMax
         self.drawSpeed = drawSpeed
@@ -33,6 +34,9 @@ class Plotter(object):
         self.liftDeltaZ = liftDeltaZ
         self.safeDeltaZ = safeDeltaZ
         self.zSpeed = zSpeed
+        self.liftCommand = liftCommand
+        self.safeLiftCommand = safeLiftCommand
+        self.downCommand = downCommand
         
     def inRange(self, point):
         for i in range(2):
@@ -50,10 +54,10 @@ class Plotter(object):
         
 def gcodeHeader(plotter):
     gcode = []
-    gcode.append('G0 S1; endstops')
-    gcode.append('G0 E0; no extrusion')
-    gcode.append('G1 S1; endstops')
-    gcode.append('G1 E0; no extrusion')
+    gcode.append('G00 S1; endstops')
+    gcode.append('G00 E0; no extrusion')
+    gcode.append('G01 S1; endstops')
+    gcode.append('G01 E0; no extrusion')
     gcode.append('G21; millimeters')
     gcode.append('G91 G0 F%.1f Z%.3f; pen park !!Zsafe' % (plotter.zSpeed*60., plotter.safeDeltaZ))
     gcode.append('G90; absolute')
@@ -123,7 +127,7 @@ class Scale(object):
         return (point[0]*self.scale[0]+self.offset[0], point[1]*self.scale[1]+self.offset[1])
         
 def comparison(a,b):
-    return (a>b)-(a<b)
+    return 1 if a>b else (-1 if a<b else 0)
         
 def safeSorted(data,comparison=comparison):
     """
@@ -134,8 +138,8 @@ def safeSorted(data,comparison=comparison):
     n = len(data)
     if n <= 1:
         return list(data)
-    d1 = safeSorted(data[:n//2])
-    d2 = safeSorted(data[n//2:])
+    d1 = safeSorted(data[:n//2],comparison=comparison)
+    d2 = safeSorted(data[n//2:],comparison=comparison)
     i1 = 0
     i2 = 0
     out = []
@@ -195,8 +199,8 @@ def comparePaths(path1,path2,tolerance=0.05,pointsToCheck=3):
                 xIntercept = p2.real - reciprocalSlope * p2.imag
                 if xIntercept == 0:
                     return False # on boundary
-                if xIntercept > 0:
-                    if p1.imag < p2.imag:
+                if p1.imag * p2.imag < 0 and xIntercept > 0:
+                    if p1.imag < 0:
                         s += 1
                     else:
                         s -= 1
@@ -345,12 +349,15 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
         
     def park():
         if not simulation:
-            gcode.append('G0 F%.1f Z%.3f; pen park !!Zpark' % (plotter.zSpeed*60., plotter.safeUpZ))
+            if plotter.safeLiftCommand:
+                gcode.append(plotter.safeLiftCommand)
+            else:
+                gcode.append('G00 F%.1f Z%.3f; pen park !!Zpark' % (plotter.zSpeed*60., plotter.safeUpZ))
 
     park()
     if not simulation:
-        gcode.append('G0 F%.1f Y%.3f; !!Ybottom' % (plotter.moveSpeed*60.,   plotter.xyMin[1]))
-        gcode.append('G0 F%.1f X%.3f; !!Xleft' % (plotter.moveSpeed*60.,   plotter.xyMin[0]))
+        gcode.append('G00 F%.1f Y%.3f; !!Ybottom' % (plotter.moveSpeed*60.,   plotter.xyMin[1]))
+        gcode.append('G00 F%.1f X%.3f; !!Xleft' % (plotter.moveSpeed*60.,   plotter.xyMin[0]))
     
     class State(object):
         pass
@@ -365,17 +372,21 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
         return math.hypot(a[0]-b[0],a[1]-b[1])
     
     def penUp(force=False):
-        if state.curZ is None or state.curZ < plotter.penUpZ or force:
+        if not simulation and plotter.liftCommand:
+            gcode.append(plotter.liftCommand)
+        elif state.curZ is None or state.curZ < plotter.penUpZ or force:
             if not simulation:
-                gcode.append('G0 F%.1f Z%.3f; pen up !!Zup' % (plotter.zSpeed*60., plotter.penUpZ))
+                gcode.append('G00 F%.1f Z%.3f; pen up !!Zup' % (plotter.zSpeed*60., plotter.penUpZ))
             if state.curZ is not None:
                 state.time += abs(plotter.penUpZ-state.curZ) / plotter.zSpeed
             state.curZ = plotter.penUpZ
         
     def penDown(force=False):
+        if not simulation and plotter.downCommand:
+            gcode.append(plotter.downCommand)
         if state.curZ is None or state.curZ != plotter.workZ or force:
             if not simulation:
-                gcode.append('G0 F%.1f Z%.3f; pen down !!Zwork' % (plotter.zSpeed*60., plotter.workZ))
+                gcode.append('G00 F%.1f Z%.3f; pen down !!Zwork' % (plotter.zSpeed*60., plotter.workZ))
             state.time += abs(state.curZ-plotter.workZ) / plotter.zSpeed
             state.curZ = plotter.workZ
 
@@ -392,7 +403,7 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
             else:
                 penUp(force=force)
             if not simulation:
-                gcode.append('G%d F%.1f X%.3f Y%.3f; %s !!Xleft+%.3f Ybottom+%.3f' % (
+                gcode.append('G0%d F%.1f X%.3f Y%.3f; %s !!Xleft+%.3f Ybottom+%.3f' % (
                     1 if down else 0, speed*60., p[0], p[1], "draw" if down else "move",
                     p[0]-plotter.xyMin[0], p[1]-plotter.xyMin[1]))
             else:
@@ -630,6 +641,21 @@ def directionalize(paths, angle, tolerance=1e-10):
             outPaths.append(list(reversed(path[startIndex:i])))
             
     return outPaths
+    
+def fixComments(plotter, data, comment = ";"):
+    if comment == ";":
+        return data
+    out = []
+    for line in data:
+        ind = line.index(";")
+        if ind >= 0:
+            if not plotter.comment:
+                out.append( ind[:ind].strip() )
+            else:
+                out.append( ind[:ind] + comment[0] + ind[ind+1:] + comment[1:] )
+        else:
+            out.append(data)            
+    return out
                     
 if __name__ == '__main__':
 
@@ -672,6 +698,7 @@ if __name__ == '__main__':
  -P|--pens=penfile: read output pens from penfile
  -U|--pause-at-start*: pause at start (can be included without any input file to manually move stuff)
  -R|--extract-color=c: extract color (specified in SVG format , e.g., rgb(1,0,0) or #ff0000 or red)
+    --comment-delimiters=xy: one or two characters specifying comment delimiters, e.g., ";" or "()"
     --tool-offset=x: cutting tool offset (millimeters) [default 0.0]
     --overcut=x: overcut (millimeters) [default 0.0]
  
@@ -705,6 +732,7 @@ if __name__ == '__main__':
     toolMode = "custom"
     booleanExtractColor = False
     quiet = False
+    comment = ";"
     sendAndSave = False
     directionAngle = None
     
@@ -957,6 +985,7 @@ if __name__ == '__main__':
         print('overcut=%.3f' % overcut)
         print('simulation' if svgSimulation else 'no-simulation')
         print('direction=' + ('none' if directionAngle is None else '%.3f'%directionAngle))
+        print('comment=' + comment)
         
         sys.exit(0)
         
@@ -1061,7 +1090,7 @@ if __name__ == '__main__':
             if hpglOut:
                 sys.stdout.write(g)
             else:
-                print('\n'.join(g))
+                print('\n'.join(fixComments(plotter, g, comment=comment)))
     
     else:
         sys.stderr.write("No points.")

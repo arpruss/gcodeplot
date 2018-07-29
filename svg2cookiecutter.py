@@ -60,18 +60,19 @@ module innerFlare(path) {
   }
 }
 
-module connector(path) {
-  render(convexity=10) linear_extrude(height=connectorThickness) polygon(points=path);
+module connector(path,height) {
+  render(convexity=10) linear_extrude(height=height) polygon(points=path);
 }
 
 module cookieCutter() {
 """
 
 class Line(object):
-    def __init__(self, height="featureHeight", width="0.5", base=False, wall=False, insideWall=False, stroke=False):
+    def __init__(self, height="featureHeight", baseHeight = "connectorHeight", width="0.5", base=False, wall=False, insideWall=False, stroke=False):
         self.height = height
         self.width = width
         self.base = base
+        self.baseHeight = "connectorHeight"
         self.wall = wall
         self.insideWall = insideWall
         self.stroke = stroke
@@ -88,7 +89,7 @@ class Line(object):
             elif self.insideWall:
                 code.append('innerFlare('+path+');')
         if self.base:
-            code.append('connector('+path+');')
+            code.append('connector('+path+','+self.baseHeight+');')
         code.append('') # will add a newline
         return code
         
@@ -97,6 +98,9 @@ def isRed(rgb):
 
 def isGreen(rgb):
     return rgb is not None and rgb[1] >= 0.4 and rgb[0]+rgb[2] < rgb[1] * 0.25
+
+def isBlack(rgb):
+    return rgb is not None and rgb[0]+rgb[1]+rgb[2]<0.2
 
 def svgToCookieCutter(filename, tolerance=0.1, strokeAll = False):
     code = [PRELIM]
@@ -113,6 +117,12 @@ def svgToCookieCutter(filename, tolerance=0.1, strokeAll = False):
             
             if path.svgState.fill is not None:
                 line.base = True
+                if isGreen(path.svgState.fill) or isRed(path.svgState.fill):
+                    line.baseHeight = "wallHeight"
+                elif isBlack(path.svgState.fill):
+                    line.baseHeight = "featureHeight"
+                else:
+                    line.baseHeight = "connectorThickness"
 
             if strokeAll or path.svgState.stroke is not None:
                 line.stroke = True
