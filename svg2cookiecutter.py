@@ -70,13 +70,13 @@ module cookieCutter() {
 """
 
 class Line(object):
-    def __init__(self, height="featureHeight", baseHeight = "connectorHeight", width="0.5", base=False, wall=False, insideWall=False, stroke=False):
+    def __init__(self, height="featureHeight", baseHeight = "connectorHeight", width="0.5", base=False, hasOuterFlare=False, hasInnerFlare=False, stroke=False):
         self.height = height
         self.width = width
         self.base = base
         self.baseHeight = "connectorHeight"
-        self.wall = wall
-        self.insideWall = insideWall
+        self.hasOuterFlare = hasOuterFlare
+        self.hasInnerFlare = hasInnerFlare
         self.stroke = stroke
         self.points = []
 
@@ -86,9 +86,9 @@ class Line(object):
         code.append( path + '=scale*[' + ','.join(('[%.3f,%.3f]'%tuple(p) for p in self.points)) + '];' );
         if self.stroke:
             code.append('wall('+path+','+self.height+','+self.width+');')
-            if self.wall:
+            if self.hasOuterFlare:
                 code.append('outerFlare('+path+');')
-            elif self.insideWall:
+            elif self.hasInnerFlare:
                 code.append('innerFlare('+path+');')
         if self.base:
             code.append('connector('+path+','+self.baseHeight+');')
@@ -128,18 +128,18 @@ def svgToCookieCutter(filename, tolerance=0.1, strokeAll = False):
 
             if strokeAll or path.svgState.stroke is not None:
                 line.stroke = True
-                if isRed(path.svgState.stroke):
+                if isRed(path.svgState.stroke): # outer wall
                     line.width = "min(maxWallThickness,max(%.3f,minWallThickness))" % path.svgState.strokeWidth
                     line.height = "wallHeight"
-                    line.wall = True
-                elif isGreen(path.svgState.stroke):
+                    line.hasOuterFlare = True
+                elif isGreen(path.svgState.stroke): # inner wall
                     line.width = "min(maxInsideWallThickness,max(%.3f,minInsideWallThickness))" % path.svgState.strokeWidth
                     line.height = "wallHeight"
-                    line.insideWall = True
-                else:
+                    line.hasInnerFlare = True
+                else: # feature
                     line.width = "min(maxFeatureThickness,max(%.3f,minFeatureThickness))" % path.svgState.strokeWidth
                     line.height = "featureHeight"
-                    line.wall = False
+                    line.hasOuterFlare = False
             elif not line.base:
                 continue
 
