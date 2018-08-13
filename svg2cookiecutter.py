@@ -77,7 +77,7 @@ class Line(object):
         self.insideWall = insideWall
         self.stroke = stroke
         self.points = []
-        
+
     def toCode(self, pathCount):
         code = []
         path = 'path'+str(pathCount)
@@ -92,7 +92,7 @@ class Line(object):
             code.append('connector('+path+','+self.baseHeight+');')
         code.append('') # will add a newline
         return code
-        
+
 def isRed(rgb):
     return rgb is not None and rgb[0] >= 0.4 and rgb[1]+rgb[2] < rgb[0] * 0.25
 
@@ -107,14 +107,14 @@ def svgToCookieCutter(filename, tolerance=0.1, strokeAll = False):
     pathCount = 0;
     minXY = [float("inf"), float("inf")]
     maxXY = [float("-inf"), float("-inf")]
-    
+
     for superpath in parser.getPathsFromSVGFile(filename)[0]:
         for path in superpath.breakup():
             line = Line()
-            
+
             line.base = False
             line.stroke = False
-            
+
             if path.svgState.fill is not None:
                 line.base = True
                 if isGreen(path.svgState.fill) or isRed(path.svgState.fill):
@@ -140,26 +140,25 @@ def svgToCookieCutter(filename, tolerance=0.1, strokeAll = False):
                     line.wall = False
             elif not line.base:
                 continue
-                
+
             lines = path.linearApproximation(error=tolerance)
-            
+
             line.points = [(-l.start.real,l.start.imag) for l in lines]
             line.points.append((-lines[-1].end.real, lines[-1].end.imag))
-            
+
             for i in range(2):
                 minXY[i] = min(minXY[i], min(p[i] for p in line.points))
                 maxXY[i] = max(maxXY[i], max(p[i] for p in line.points))
-                
+
             code += line.toCode(pathCount)
             pathCount += 1
 
     size = max(maxXY[0]-minXY[0], maxXY[1]-minXY[1])
-    
+
     code.append('}\n')
     code.append('translate([%.3f*scale + wallFlareWidth/2,  %.3f*scale + wallFlareWidth/2,0]) cookieCutter();' % (-minXY[0],-minXY[1]))
-            
+
     return '\n'.join(code).replace('$OVERALL_SIZE$', '%.3f' % size)
-    
+
 if __name__ == '__main__':
     print(svgToCookieCutter(sys.argv[1]))
-    
