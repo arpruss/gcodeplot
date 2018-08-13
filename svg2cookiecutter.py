@@ -14,11 +14,11 @@ insideWallFlareWidth = 5;
 insideWallFlareThickness = 3;
 
 featureHeight = 8;
-minFeatureThickness = 0.8;
+minFeatureThickness = 1;
 maxFeatureThickness = 3;
 
-connectorThickness = 1;
-cuttingEdgeThickness = 1;
+connectorThickness = 3;
+cuttingEdgeThickness = 1.5;
 
 size = $OVERALL_SIZE$;
 
@@ -35,15 +35,17 @@ module ribbon(points, thickness=1) {
     }
 }
 
-module wall(path,height,thickness) {
-  render(convexity=10) minkowski() {
-    linear_extrude(height=.1) ribbon(path,thickness=.01);
-    cylinder(h=height,d1=thickness,d2=cuttingEdgeThickness,$fn=4);
-  }
-  // faster but less sharp edges:
-  // render(convexity=10) linear_extrude(height=height) ribbon(path,thickness=thickness);
-}
 
+module wall(points,height,thickness) {
+    render(convexity=10) union() {
+        for (i=[1:len(points)-1]) {
+            hull() {
+                translate(points[i-1]) cylinder(h=height,d1=thickness,d2=cuttingEdgeThickness,$fn=4);
+                translate(points[i])   cylinder(h=height,d1=thickness,d2=cuttingEdgeThickness,$fn=4);
+            }
+        }
+    }
+}
 
 
 module outerFlare(path) {
