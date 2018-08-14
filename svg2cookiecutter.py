@@ -69,6 +69,15 @@ module connector(path,height) {
 module cookieCutter() {
 """
 
+def isRed(rgb):
+    return rgb is not None and rgb[0] >= 0.4 and rgb[1]+rgb[2] < rgb[0] * 0.25
+
+def isGreen(rgb):
+    return rgb is not None and rgb[1] >= 0.4 and rgb[0]+rgb[2] < rgb[1] * 0.25
+
+def isBlack(rgb):
+    return rgb is not None and rgb[0]+rgb[1]+rgb[2]<0.2
+
 class Line(object):
     def __init__(self, height="featureHeight", baseHeight = "connectorHeight", width="0.5", base=False, hasOuterFlare=False, hasInnerFlare=False, stroke=False):
         self.height = height
@@ -95,15 +104,6 @@ class Line(object):
         code.append('') # will add a newline
         return code
 
-def isRed(rgb):
-    return rgb is not None and rgb[0] >= 0.4 and rgb[1]+rgb[2] < rgb[0] * 0.25
-
-def isGreen(rgb):
-    return rgb is not None and rgb[1] >= 0.4 and rgb[0]+rgb[2] < rgb[1] * 0.25
-
-def isBlack(rgb):
-    return rgb is not None and rgb[0]+rgb[1]+rgb[2]<0.2
-
 def svgToCookieCutter(filename, tolerance=0.1, strokeAll = False):
     code = [PRELIM]
     pathCount = 0;
@@ -113,10 +113,9 @@ def svgToCookieCutter(filename, tolerance=0.1, strokeAll = False):
     for superpath in parser.getPathsFromSVGFile(filename)[0]:
         for path in superpath.breakup():
             line = Line()
-
-            line.base = False
-            line.stroke = False
-
+            lines = path.linearApproximation(error=tolerance)
+            line.points = [(-l.start.real,l.start.imag) for l in lines]
+            line.points.append((-lines[-1].end.real, lines[-1].end.imag))
             if path.svgState.fill is not None:
                 line.base = True
                 if isGreen(path.svgState.fill) or isRed(path.svgState.fill):
@@ -142,11 +141,6 @@ def svgToCookieCutter(filename, tolerance=0.1, strokeAll = False):
                     line.hasOuterFlare = False
             elif not line.base:
                 continue
-
-            lines = path.linearApproximation(error=tolerance)
-
-            line.points = [(-l.start.real,l.start.imag) for l in lines]
-            line.points.append((-lines[-1].end.real, lines[-1].end.imag))
 
             for i in range(2):
                 minXY[i] = min(minXY[i], min(p[i] for p in line.points))
