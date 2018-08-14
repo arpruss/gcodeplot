@@ -79,20 +79,16 @@ def isBlack(rgb):
     return rgb is not None and rgb[0]+rgb[1]+rgb[2]<0.2
 
 class Line(object):
-    def __init__(self, height="featureHeight", baseHeight = "connectorHeight", width="0.5", base=False, hasOuterFlare=False, hasInnerFlare=False, stroke=False):
-        self.height = height
-        self.width = width
+    def __init__(self, points, base, stroke, strokeWidth):
+        self.points = points
         self.base = base
-        self.baseHeight = "connectorHeight"
-        self.hasOuterFlare = hasOuterFlare
-        self.hasInnerFlare = hasInnerFlare
         self.stroke = stroke
-        self.points = []
+        self.strokeWidth = strokeWidth
 
     def toCode(self, pathCount):
         code = []
         path = 'path'+str(pathCount)
-        code.append( path + '=scale*[' + ','.join(('[%.3f,%.3f]'%tuple(p) for p in self.points)) + '];' );
+        code.append( path + ' = scale * [' + ','.join(('[%.3f,%.3f]'%tuple(p) for p in self.points)) + '];' );
         if self.stroke:
             code.append('wall('+path+','+self.height+','+self.width+');')
             if self.hasOuterFlare:
@@ -104,6 +100,41 @@ class Line(object):
         code.append('') # will add a newline
         return code
 
+# width="0.5", base=False, stroke=False):
+class OuterWall(Line):
+    def __init__(self, points, base, stroke, strokeWidth):
+        super().__init__(points, base, stroke, strokeWidth)
+        self.height = "wallHeight"
+        self.width = "min(maxWallThickness,max(%.3f,minWallThickness))" % self.strokeWidth
+        self.baseHeight = "wallHeight"
+        self.hasOuterFlare = True
+        self.hasInnerFlare = False
+
+class InnerWall(Line):
+    def __init__(self, points, base, stroke, strokeWidth):
+        super().__init__(points, base, stroke, strokeWidth)
+        self.height = "wallHeight"
+        self.width = "min(maxInsideWallThickness,max(%.3f,minInsideWallThickness))" % self.strokeWidth
+        self.baseHeight = "wallHeight"
+        self.hasOuterFlare = False
+        self.hasInnerFlare = True
+
+class Feature(Line):
+    def __init__(self, points, base, stroke, strokeWidth):
+        super().__init__(points, base, stroke, strokeWidth)
+        self.height = "featureHeight"
+        self.width = "min(maxFeatureThickness,max(%.3f,minFeatureThickness))" % self.strokeWidth
+        self.baseHeight = "featureHeight"
+        self.hasOuterFlare = False
+        self.hasInnerFlare = False
+
+class Connector(Line):
+    def __init__(self, points, base):
+        super().__init__(points, base, False, None) # no stroke for connectors, thus no use of self.height and self.width
+        self.baseHeight = "connectorThickness"
+        self.hasOuterFlare = False
+        self.hasInnerFlare = False
+
 def svgToCookieCutter(filename, tolerance=0.1, strokeAll = False):
     code = [PRELIM]
     pathCount = 0;
@@ -112,35 +143,22 @@ def svgToCookieCutter(filename, tolerance=0.1, strokeAll = False):
 
     for superpath in parser.getPathsFromSVGFile(filename)[0]:
         for path in superpath.breakup():
-            line = Line()
-            lines = path.linearApproximation(error=tolerance)
-            line.points = [(-l.start.real,l.start.imag) for l in lines]
-            line.points.append((-lines[-1].end.real, lines[-1].end.imag))
-            if path.svgState.fill is not None:
-                line.base = True
-                if isGreen(path.svgState.fill) or isRed(path.svgState.fill):
-                    line.baseHeight = "wallHeight"
-                elif isBlack(path.svgState.fill):
-                    line.baseHeight = "featureHeight"
-                else:
-                    line.baseHeight = "connectorThickness"
+            base = path.svgState.fill is not None
+            stroke = strokeAll or path.svgState.stroke is not None
+            if not stroke and not base: continue
 
-            if strokeAll or path.svgState.stroke is not None:
-                line.stroke = True
-                if isRed(path.svgState.stroke): # outer wall
-                    line.width = "min(maxWallThickness,max(%.3f,minWallThickness))" % path.svgState.strokeWidth
-                    line.height = "wallHeight"
-                    line.hasOuterFlare = True
-                elif isGreen(path.svgState.stroke): # inner wall
-                    line.width = "min(maxInsideWallThickness,max(%.3f,minInsideWallThickness))" % path.svgState.strokeWidth
-                    line.height = "wallHeight"
-                    line.hasInnerFlare = True
-                else: # feature
-                    line.width = "min(maxFeatureThickness,max(%.3f,minFeatureThickness))" % path.svgState.strokeWidth
-                    line.height = "featureHeight"
-                    line.hasOuterFlare = False
-            elif not line.base:
-                continue
+            lines = path.linearApproximation(error=tolerance)
+            points = [(-l.start.real,l.start.imag) for l in lines]
+            points.append((-lines[-1].end.real, lines[-1].end.imag))
+
+            if isRed    (path.svgState.fill) or isRed  (path.svgState.stroke):
+                line = OuterWall(points, base, stroke, path.svgState.strokeWidth)
+            elif isGreen(path.svgState.fill) or isGreen(path.svgState.stroke):
+                line = InnerWall(points, base, stroke, path.svgState.strokeWidth)
+            elif isBlack(path.svgState.fill) or isBlack(path.svgState.stroke):
+                line = Feature(points, base, stroke, path.svgState.strokeWidth)
+            else:
+                line = Connector(points, base)
 
             for i in range(2):
                 minXY[i] = min(minXY[i], min(p[i] for p in line.points))
