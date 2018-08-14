@@ -66,7 +66,6 @@ module fill(path,height) {
   render(convexity=10) linear_extrude(height=height) polygon(points=path);
 }
 
-module cookieCutter() {
 """
 
 def isRed(rgb):
@@ -86,9 +85,11 @@ class Line(object):
         self.stroke = stroke
         self.strokeWidth = strokeWidth
 
-    def toCode(self):
+    def pathCode(self):
+        return self.pathName + ' = scale * [' + ','.join(('[%.3f,%.3f]'%tuple(p) for p in self.points)) + '];'
+
+    def shapesCode(self):
         code = []
-        code.append(self.pathName + ' = scale * [' + ','.join(('[%.3f,%.3f]'%tuple(p) for p in self.points)) + '];' );
         if self.stroke:
             code.append('wall('+self.pathName+','+self.height+','+self.width+');')
             if self.hasOuterFlare:
@@ -97,8 +98,7 @@ class Line(object):
                 code.append('innerFlare('+self.pathName+');')
         if self.fill:
             code.append('fill('+self.pathName+','+self.fillHeight+');')
-        code.append('') # will add a newline
-        return code
+        return '\n'.join(code) + '\n'
 
 class OuterWall(Line):
     def __init__(self, pathName, points, fill, stroke, strokeWidth):
@@ -135,7 +135,7 @@ class Connector(Line):
         self.hasInnerFlare = False
 
 def svgToCookieCutter(filename, tolerance=0.1, strokeAll = False):
-    code = [PRELIM]
+    lines = []
     pathCount = 0;
     minXY = [float("inf"), float("inf")]
     maxXY = [float("-inf"), float("-inf")]
@@ -148,9 +148,9 @@ def svgToCookieCutter(filename, tolerance=0.1, strokeAll = False):
             stroke = strokeAll or path.svgState.stroke is not None
             if not stroke and not fill: continue
 
-            lines = path.linearApproximation(error=tolerance)
-            points = [(-l.start.real,l.start.imag) for l in lines]
-            points.append((-lines[-1].end.real, lines[-1].end.imag))
+            linearPath = path.linearApproximation(error=tolerance)
+            points = [(-l.start.real,l.start.imag) for l in linearPath]
+            points.append((-linearPath[-1].end.real, linearPath[-1].end.imag))
 
             if isRed    (path.svgState.fill) or isRed  (path.svgState.stroke):
                 line = OuterWall(pathName, points, fill, stroke, path.svgState.strokeWidth)
@@ -164,11 +164,14 @@ def svgToCookieCutter(filename, tolerance=0.1, strokeAll = False):
             for i in range(2):
                 minXY[i] = min(minXY[i], min(p[i] for p in line.points))
                 maxXY[i] = max(maxXY[i], max(p[i] for p in line.points))
-
-            code += line.toCode()
+            lines.append(line)
 
     size = max(maxXY[0]-minXY[0], maxXY[1]-minXY[1])
 
+    code = [PRELIM]
+    code += [line.pathCode() for line in lines]
+    code.append('\nmodule cookieCutter() {')
+    code += [line.shapesCode() for line in lines]
     code.append('}\n')
     code.append('translate([%.3f*scale + wallFlareWidth/2,  %.3f*scale + wallFlareWidth/2,0]) cookieCutter();' % (-minXY[0],-minXY[1]))
 
