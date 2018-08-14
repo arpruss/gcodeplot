@@ -85,18 +85,17 @@ class Line(object):
         self.stroke = stroke
         self.strokeWidth = strokeWidth
 
-    def toCode(self, pathCount):
+    def toCode(self, pathName):
         code = []
-        path = 'path'+str(pathCount)
-        code.append( path + ' = scale * [' + ','.join(('[%.3f,%.3f]'%tuple(p) for p in self.points)) + '];' );
+        code.append( pathName + ' = scale * [' + ','.join(('[%.3f,%.3f]'%tuple(p) for p in self.points)) + '];' );
         if self.stroke:
-            code.append('wall('+path+','+self.height+','+self.width+');')
+            code.append('wall('+pathName+','+self.height+','+self.width+');')
             if self.hasOuterFlare:
-                code.append('outerFlare('+path+');')
+                code.append('outerFlare('+pathName+');')
             elif self.hasInnerFlare:
-                code.append('innerFlare('+path+');')
+                code.append('innerFlare('+pathName+');')
         if self.fill:
-            code.append('fill('+path+','+self.fillHeight+');')
+            code.append('fill('+pathName+','+self.fillHeight+');')
         code.append('') # will add a newline
         return code
 
@@ -163,7 +162,7 @@ def svgToCookieCutter(filename, tolerance=0.1, strokeAll = False):
                 minXY[i] = min(minXY[i], min(p[i] for p in line.points))
                 maxXY[i] = max(maxXY[i], max(p[i] for p in line.points))
 
-            code += line.toCode(pathCount)
+            code += line.toCode('path'+str(pathCount))
             pathCount += 1
 
     size = max(maxXY[0]-minXY[0], maxXY[1]-minXY[1])
