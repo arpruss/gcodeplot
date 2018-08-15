@@ -19,9 +19,14 @@ maxFeatureThickness = 3;
 
 connectorThickness = 3;
 cuttingEdgeThickness = 1.5;
+demouldingPlateHeight = 4;
+demouldingPlateSlack = 1;
+
+function featureThickness(t)    = min(maxFeatureThickness,   max(t,minFeatureThickness)) ;
+function wallThickness(t)       = min(maxWallThickness,      max(t,minWallThickness)) ;
+function insideWallThickness(t) = min(maxInsideWallThickness,max(t,minInsideWallThickness)) ;
 
 size = $OVERALL_SIZE$;
-
 scale = size/$OVERALL_SIZE$;
 
 module ribbon(points, thickness=1) {
@@ -40,8 +45,8 @@ module wall(points,height,thickness) {
     render(convexity=10) union() {
         for (i=[1:len(points)-1]) {
             hull() {
-                translate(points[i-1]) cylinder(h=height,d1=thickness,d2=cuttingEdgeThickness,$fn=4);
-                translate(points[i])   cylinder(h=height,d1=thickness,d2=cuttingEdgeThickness,$fn=4);
+                translate(points[i-1]) cylinder(h=height,d1=thickness,d2=cuttingEdgeThickness,$fn=8);
+                translate(points[i])   cylinder(h=height,d1=thickness,d2=cuttingEdgeThickness,$fn=8);
             }
         }
     }
@@ -104,7 +109,7 @@ class OuterWall(Line):
     def __init__(self, pathName, points, fill, stroke, strokeWidth):
         super().__init__(pathName, points, fill, stroke, strokeWidth)
         self.height = "wallHeight"
-        self.width = "min(maxWallThickness,max(%.3f,minWallThickness))" % self.strokeWidth
+        self.width = "wallThickness(%.3f)" % self.strokeWidth
         self.fillHeight = "wallHeight"
         self.hasOuterFlare = True
         self.hasInnerFlare = False
@@ -113,7 +118,7 @@ class InnerWall(Line):
     def __init__(self, pathName, points, fill, stroke, strokeWidth):
         super().__init__(pathName, points, fill, stroke, strokeWidth)
         self.height = "wallHeight"
-        self.width = "min(maxInsideWallThickness,max(%.3f,minInsideWallThickness))" % self.strokeWidth
+        self.width = "insideWallThickness(%.3f)" % self.strokeWidth
         self.fillHeight = "wallHeight"
         self.hasOuterFlare = False
         self.hasInnerFlare = True
@@ -122,7 +127,7 @@ class Feature(Line):
     def __init__(self, pathName, points, fill, stroke, strokeWidth):
         super().__init__(pathName, points, fill, stroke, strokeWidth)
         self.height = "featureHeight"
-        self.width = "min(maxFeatureThickness,max(%.3f,minFeatureThickness))" % self.strokeWidth
+        self.width = "featureThickness(%.3f)" % self.strokeWidth
         self.fillHeight = "featureHeight"
         self.hasOuterFlare = False
         self.hasInnerFlare = False
@@ -130,6 +135,7 @@ class Feature(Line):
 class Connector(Line):
     def __init__(self, pathName, points, fill):
         super().__init__(pathName, points, fill, False, None) # no stroke for connectors, thus no use of self.height and self.width
+        self.width = None
         self.fillHeight = "connectorThickness"
         self.hasOuterFlare = False
         self.hasInnerFlare = False
@@ -142,7 +148,7 @@ def svgToCookieCutter(filename, tolerance=0.1, strokeAll = False):
 
     for superpath in parser.getPathsFromSVGFile(filename)[0]:
         for path in superpath.breakup():
-            pathName = 'path'+str(pathCount)
+            pathName = '_'+str(pathCount)
             pathCount += 1
             fill = path.svgState.fill is not None
             stroke = strokeAll or path.svgState.stroke is not None
@@ -153,13 +159,13 @@ def svgToCookieCutter(filename, tolerance=0.1, strokeAll = False):
             points.append((-linearPath[-1].end.real, linearPath[-1].end.imag))
 
             if isRed    (path.svgState.fill) or isRed  (path.svgState.stroke):
-                line = OuterWall(pathName, points, fill, stroke, path.svgState.strokeWidth)
+                line = OuterWall('outerWall'+pathName, points, fill, stroke, path.svgState.strokeWidth)
             elif isGreen(path.svgState.fill) or isGreen(path.svgState.stroke):
-                line = InnerWall(pathName, points, fill, stroke, path.svgState.strokeWidth)
+                line = InnerWall('innerWall'+pathName, points, fill, stroke, path.svgState.strokeWidth)
             elif isBlack(path.svgState.fill) or isBlack(path.svgState.stroke):
-                line = Feature  (pathName, points, fill, stroke, path.svgState.strokeWidth)
+                line = Feature  ('feature'  +pathName, points, fill, stroke, path.svgState.strokeWidth)
             else:
-                line = Connector(pathName, points, fill)
+                line = Connector('connector'+pathName, points, fill)
 
             for i in range(2):
                 minXY[i] = min(minXY[i], min(p[i] for p in line.points))
@@ -173,7 +179,33 @@ def svgToCookieCutter(filename, tolerance=0.1, strokeAll = False):
     code.append('\nmodule cookieCutter() {')
     code += [line.shapesCode() for line in lines]
     code.append('}\n')
-    code.append('translate([%.3f*scale + wallFlareWidth/2,  %.3f*scale + wallFlareWidth/2,0]) cookieCutter();' % (-minXY[0],-minXY[1]))
+
+
+    positives =        [line for line in lines if     isinstance(line, OuterWall) and line.stroke and not line.fill]
+    negatives_stroke = [line for line in lines]
+    negatives_fill   = [line for line in lines if not isinstance(line, OuterWall) and line.fill]
+    code.append("""module demouldingPlate(){
+    // a plate to help push on the cookie to turn it out
+	render(convexity=10) difference() {
+		linear_extrude(height=demouldingPlateHeight) union() {
+    """)
+    for line in positives:
+        code.append('polygon(points='+line.pathName+');')
+
+    code.append("""}
+      translate([0,0,-0.01]) linear_extrude(height=demouldingPlateHeight+0.02) union() {""")
+    for line in negatives_stroke:
+        code.append('ribbon('+line.pathName+',thickness=demouldingPlateSlack'+('+'+line.width if line.stroke else '')+');')
+    for line in negatives_fill:
+        code.append('polygon(points='+line.pathName+');')
+        # TODO: we should remove the interior of polygonal inner walls
+
+    code.append('}}}\n')
+
+    code.append('translate([%.3f*scale + wallFlareWidth/2,  %.3f*scale + wallFlareWidth/2,0]) cookieCutter();'    % (-minXY[0],-minXY[1]))
+    code.append('translate([-40,15,0]) cylinder(h=wallHeight,d=5,$fn=20);')
+    code.append('mirror([1,0,0])')
+    code.append('translate([%.3f*scale + wallFlareWidth/2,  %.3f*scale + wallFlareWidth/2,0]) demouldingPlate();' % (-minXY[0],-minXY[1]))
 
     return '\n'.join(code).replace('$OVERALL_SIZE$', '%.3f' % size)
 
