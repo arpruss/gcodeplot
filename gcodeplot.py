@@ -992,6 +992,8 @@ if __name__ == '__main__':
         print('simulation' if svgSimulation else 'no-simulation')
         print('direction=' + ('none' if directionAngle is None else '%.3f'%directionAngle))
         print('comment=' + comment)
+        print('lift-command=' + ('none' if plotter.liftCommand is None else plotter.liftCommand))
+        print('down-command=' + ('none' if plotter.downCommand is None else plotter.downCommand))
 
         sys.exit(0)
 
