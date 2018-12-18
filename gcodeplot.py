@@ -374,7 +374,7 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
     def penUp(force=False):
         if not simulation and plotter.liftCommand:
             gcode.append(plotter.liftCommand)
-        elif state.curZ is None or state.curZ < plotter.penUpZ or force:
+        elif state.curZ is None or state.curZ not in (plotter.safeUpZ, plotter.penUpZ) or force:
             if not simulation:
                 gcode.append('G00 F%.1f Z%.3f; pen up !!Zup' % (plotter.zSpeed*60., plotter.penUpZ))
             if state.curZ is not None:
