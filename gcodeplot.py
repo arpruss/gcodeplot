@@ -349,8 +349,8 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
 
     def park():
         if not simulation:
-            if plotter.safeLiftCommand:
-                gcode.append(plotter.safeLiftCommand)
+            if plotter.safeLiftCommand or plotter.liftCommand:
+                gcode.append(plotter.safeLiftCommand or plotter.liftCommand)
             else:
                 gcode.append('G00 F%.1f Z%.3f; pen park !!Zpark' % (plotter.zSpeed*60., plotter.safeUpZ))
 
@@ -372,21 +372,23 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
         return math.hypot(a[0]-b[0],a[1]-b[1])
 
     def penUp(force=False):
-        if not simulation and plotter.liftCommand:
-            gcode.append(plotter.liftCommand)
-        elif state.curZ is None or state.curZ not in (plotter.safeUpZ, plotter.penUpZ) or force:
+        if state.curZ is None or state.curZ not in (plotter.safeUpZ, plotter.penUpZ) or force:
             if not simulation:
-                gcode.append('G00 F%.1f Z%.3f; pen up !!Zup' % (plotter.zSpeed*60., plotter.penUpZ))
+				if plotter.liftCommand:
+					gcode.append(plotter.liftCommand)
+				else:
+					gcode.append('G00 F%.1f Z%.3f; pen up !!Zup' % (plotter.zSpeed*60., plotter.penUpZ))
             if state.curZ is not None:
                 state.time += abs(plotter.penUpZ-state.curZ) / plotter.zSpeed
             state.curZ = plotter.penUpZ
 
     def penDown(force=False):
-        if not simulation and plotter.downCommand:
-            gcode.append(plotter.downCommand)
         if state.curZ is None or state.curZ != plotter.workZ or force:
             if not simulation:
-                gcode.append('G00 F%.1f Z%.3f; pen down !!Zwork' % (plotter.zSpeed*60., plotter.workZ))
+				if plotter.downCommand:
+					gcode.append(plotter.downCommand)
+				else:
+					gcode.append('G00 F%.1f Z%.3f; pen down !!Zwork' % (plotter.zSpeed*60., plotter.workZ))
             state.time += abs(state.curZ-plotter.workZ) / plotter.zSpeed
             state.curZ = plotter.workZ
 
