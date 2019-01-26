@@ -36,7 +36,8 @@ class Plotter(object):
                        "G90; absolute|"
                        "G28 X; home|"
                        "G28 Y; home|"
-                       "G28 Z; home"):
+                       "G28 Z; home",
+            endCode=None):
         self.xyMin = xyMin
         self.xyMax = xyMax
         self.drawSpeed = drawSpeed
@@ -49,6 +50,7 @@ class Plotter(object):
         self.safeLiftCommand = safeLiftCommand
         self.downCommand = downCommand
         self.initCode = initCode
+        self.endCode = endCode
         self.comment = comment
 
     def inRange(self, point):
@@ -73,11 +75,12 @@ class Plotter(object):
 def processCode(code):
     if not code:
         return []
-        
+
     data = []
     pattern = r'\{\{([^}]+)\}\}'
     
     data = tuple( evaluate(expr, plotter.variables, plotter.formulas) for expr in re.findall(pattern, code))
+
         
     formatString = re.sub(pattern, '', code.replace('|', '\n'))
     
@@ -478,6 +481,8 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
 
     if simulation:
         gcode.append('</svg>')
+    else:
+        gcode.extend(processCode(plotter.endCode))
 
     if not quiet:
         sys.stderr.write('Estimated printing time: %dm %.1fs\n' % (state.time // 60, state.time % 60))
@@ -780,7 +785,7 @@ if __name__ == '__main__':
                         'pause-at-start', 'no-pause-at-start', 'min-x=', 'max-x=', 'min-y=', 'max-y=',
                         'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all', 'gcode-pause', 'dump-options', 'tab=', 'extract-color=', 'sort', 'no-sort', 'simulation', 'no-simulation', 'tool-offset=', 'overcut=',
                         'boolean-shading-crosshatch=', 'boolean-sort=', 'tool-mode=', 'send-and-save=', 'direction=', 'lift-command=', 'down-command=',
-                        'init-code=', 'comment-delimiters=' ], )
+                        'init-code=', 'comment-delimiters=', 'end-code=' ], )
 
         if len(args) + len(opts) == 0:
             raise getopt.GetoptError("invalid commandline")
@@ -956,6 +961,8 @@ if __name__ == '__main__':
                 plotter.downCommand = maybeNone(arg)
             elif opt == '--init-code':
                 plotter.initCode = maybeNone(arg)
+            elif opt == '--end-code':
+                plotter.endCode = maybeNone(arg)
             elif opt == '--comment-delimiters':
                 plotter.comment = maybeNone(arg)
             else:
@@ -1028,10 +1035,10 @@ if __name__ == '__main__':
         print('overcut=%.3f' % overcut)
         print('simulation' if svgSimulation else 'no-simulation')
         print('direction=' + ('none' if directionAngle is None else '%.3f'%directionAngle))
-        print('comment=' + comment)
         print('lift-command=' + ('none' if plotter.liftCommand is None else plotter.liftCommand))
         print('down-command=' + ('none' if plotter.downCommand is None else plotter.downCommand))
         print('init-code=' + ('none' if plotter.initCode is None else plotter.initCode))
+        print('end-code=' + ('none' if plotter.endCode is None else plotter.endCode))
         print('comment-delimiters=' + ('none' if plotter.comment is None else plotter.comment))
 
         sys.exit(0)
