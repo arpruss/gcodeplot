@@ -69,7 +69,7 @@ class Plotter(object):
         
     def updateVariables(self):
         self.variables = {'lift':self.liftDeltaZ, 'work':self.workZ, 'safe':self.safeDeltaZ, 'left':self.xyMin[0],
-            'bottom':self.xyMin[1], 'zspeed':self.zSpeed}
+            'bottom':self.xyMin[1], 'zspeed':self.zSpeed, 'movespeed':self.moveSpeed}
         self.formulas = {'right':str(self.xyMax[0]), 'top':str(self.xyMax[1]), 'up':'work+lift', 'park':'work+safe', 'centerx':'(left+right)/2.', 'centery':'(top+bottom)/2.'}
 
 def processCode(code):

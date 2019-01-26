@@ -29,6 +29,6 @@ no-simulation
 direction=none
 lift-command=none
 down-command=none
-init-code=G90|G92 Z%.1f{{park}}
-end-code=G0 Z%.1f{{park}}|G0 X0 Y0
+init-code=G90|G92 X0 Y0 Z%.1f{{park}}
+end-code=G1 F%.1f{{60*zspeed}} Z%.1f{{park}}|G1 F%.1f{{60*movespeed}} X0 Y0
 comment-delimiters=;
