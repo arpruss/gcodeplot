@@ -11,6 +11,7 @@ import cmath
 from random import sample
 from svgpath.shader import Shader
 from gcodeplotutils.processoffset import OffsetProcessor
+from gcodeplotutils.evaluate import evaluate
 
 SCALE_NONE = 0
 SCALE_DOWN_ONLY = 1
@@ -25,7 +26,17 @@ ALIGN_CENTER = 3
 class Plotter(object):
     def __init__(self, xyMin=(7,8), xyMax=(204,178),
             drawSpeed=35, moveSpeed=40, zSpeed=5, workZ = 14.5, liftDeltaZ = 2.5, safeDeltaZ = 20,
-            liftCommand=None, safeLiftCommand=None, downCommand=None, comment=";"):
+            liftCommand=None, safeLiftCommand=None, downCommand=None, comment=";",
+            initCode = "G00 S1; endstops|"
+                       "G00 E0; no extrusion|"
+                       "G01 S1; endstops|"
+                       "G01 E0; no extrusion|"
+                       "G21; millimeters|"
+                       "G91 G0 F%.1f{{zspeed*60}} Z%.3f{{safe}}; pen park !!Zsafe|"
+                       "G90; absolute|"
+                       "G28 X; home|"
+                       "G28 Y; home|"
+                       "G28 Z; home"):
         self.xyMin = xyMin
         self.xyMax = xyMax
         self.drawSpeed = drawSpeed
@@ -37,6 +48,7 @@ class Plotter(object):
         self.liftCommand = liftCommand
         self.safeLiftCommand = safeLiftCommand
         self.downCommand = downCommand
+        self.initCode = initCode
 
     def inRange(self, point):
         for i in range(2):
@@ -51,20 +63,27 @@ class Plotter(object):
     @property
     def penUpZ(self):
         return self.workZ + self.liftDeltaZ
+        
+    def updateVariables(self):
+        self.variables = {'lift':self.liftDeltaZ, 'work':self.workZ, 'safe':self.safeDeltaZ, 'left':self.xyMin[0],
+            'bottom':self.xyMin[1], 'zspeed':self.zSpeed}
+        self.formulas = {'right':str(self.xyMax[0]), 'top':str(self.xyMax[1]), 'up':'work+lift', 'park':'work+safe', 'centerx':'(left+right)/2.', 'centery':'(top+bottom)/2.'}
 
+def processCode(code):
+    if not code:
+        return []
+        
+    data = []
+    pattern = r'\{\{([^}]+)\}\}'
+    
+    data = tuple( evaluate(expr, plotter.variables, plotter.formulas) for expr in re.findall(pattern, code))
+        
+    formatString = re.sub(pattern, '', code.replace('\\n', '\n'))
+    
+    return [formatString % data]
+        
 def gcodeHeader(plotter):
-    gcode = []
-    gcode.append('G00 S1; endstops')
-    gcode.append('G00 E0; no extrusion')
-    gcode.append('G01 S1; endstops')
-    gcode.append('G01 E0; no extrusion')
-    gcode.append('G21; millimeters')
-    gcode.append('G91 G0 F%.1f Z%.3f; pen park !!Zsafe' % (plotter.zSpeed*60., plotter.safeDeltaZ))
-    gcode.append('G90; absolute')
-    gcode.append('G28 X; home')
-    gcode.append('G28 Y; home')
-    gcode.append('G28 Z; home')
-    return gcode
+    return processCode(plotter.initCode)
 
 def isSameColor(rgb1, rgb2):
     if rgb1 is None or rgb2 is None:
@@ -104,21 +123,21 @@ class Scale(object):
             if delta == 0:
                 s[i] = 1.
             else:
-                s[i] = (plotter.xyMax[i]-plotter.xyMin[i]) / delta
+                s[i] = (self.xyMax[i]-self.xyMin[i]) / delta
         self.scale = [min(s),min(s)]
-        self.offset = list(plotter.xyMin[i] - xyMin[i]*self.scale[i] for i in range(2))
+        self.offset = list(self.xyMin[i] - xyMin[i]*self.scale[i] for i in range(2))
 
     def align(self, plotter, xyMin, xyMax, align):
         o = [0,0]
         for i in range(2):
             if align[i] == ALIGN_LEFT:
-                o[i] = plotter.xyMin[i] - self.scale[i]*xyMin[i]
+                o[i] = self.xyMin[i] - self.scale[i]*xyMin[i]
             elif align[i] == ALIGN_RIGHT:
-                o[i] = plotter.xyMax[i] - self.scale[i]*xyMax[i]
+                o[i] = self.xyMax[i] - self.scale[i]*xyMax[i]
             elif align[i] == ALIGN_NONE:
-                o[i] = self.offset[i] # plotter.xyMin[i]
+                o[i] = self.offset[i] # self.xyMin[i]
             elif align[i] == ALIGN_CENTER:
-                o[i] = 0.5 * (plotter.xyMin[i] - self.scale[i]*xyMin[i] + plotter.xyMax[i] - self.scale[i]*xyMax[i])
+                o[i] = 0.5 * (self.xyMin[i] - self.scale[i]*xyMin[i] + self.xyMax[i] - self.scale[i]*xyMax[i])
             else:
                 raise ValueError()
         self.offset = o
@@ -346,11 +365,13 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
         gcode.append('<?xml version="1.0" standalone="yes"?>')
         gcode.append('<svg width="%.4fmm" height="%.4fmm" viewBox="%.4f %.4f %.4f %.4f" xmlns="http://www.w3.org/2000/svg" version="1.1">' % (
             plotter.xyMax[0]-plotter.xyMin[0], plotter.xyMax[1]-plotter.xyMin[0], plotter.xyMin[0], plotter.xyMin[1], plotter.xyMax[0], plotter.xyMax[1]))
-
+            
+            
     def park():
         if not simulation:
-            if plotter.safeLiftCommand or plotter.liftCommand:
-                gcode.append(plotter.safeLiftCommand or plotter.liftCommand)
+            lift = plotter.safeLiftCommand or plotter.liftCommand
+            if lift:
+                gcode.extend(processCode(lift))
             else:
                 gcode.append('G00 F%.1f Z%.3f; pen park !!Zpark' % (plotter.zSpeed*60., plotter.safeUpZ))
 
@@ -374,10 +395,10 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
     def penUp(force=False):
         if state.curZ is None or state.curZ not in (plotter.safeUpZ, plotter.penUpZ) or force:
             if not simulation:
-				if plotter.liftCommand:
-					gcode.append(plotter.liftCommand)
-				else:
-					gcode.append('G00 F%.1f Z%.3f; pen up !!Zup' % (plotter.zSpeed*60., plotter.penUpZ))
+                if plotter.liftCommand:
+                    gcode.extend(processCode(plotter.liftCommand))
+                else:
+                    gcode.append('G00 F%.1f Z%.3f; pen up !!Zup' % (plotter.zSpeed*60., plotter.penUpZ))
             if state.curZ is not None:
                 state.time += abs(plotter.penUpZ-state.curZ) / plotter.zSpeed
             state.curZ = plotter.penUpZ
@@ -385,10 +406,10 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
     def penDown(force=False):
         if state.curZ is None or state.curZ != plotter.workZ or force:
             if not simulation:
-				if plotter.downCommand:
-					gcode.append(plotter.downCommand)
-				else:
-					gcode.append('G00 F%.1f Z%.3f; pen down !!Zwork' % (plotter.zSpeed*60., plotter.workZ))
+                if plotter.downCommand:
+                    gcode.extend(processCode(plotter.downCommand))
+                else:
+                    gcode.append('G00 F%.1f Z%.3f; pen down !!Zwork' % (plotter.zSpeed*60., plotter.workZ))
             state.time += abs(state.curZ-plotter.workZ) / plotter.zSpeed
             state.curZ = plotter.workZ
 
@@ -703,8 +724,9 @@ if __name__ == '__main__':
     --comment-delimiters=xy: one or two characters specifying comment delimiters, e.g., ";" or "()"
     --tool-offset=x: cutting tool offset (millimeters) [default 0.0]
     --overcut=x: overcut (millimeters) [default 0.0]
-    --lift-command=gcode: gcode lift command
-    --down-command=gcode: gcode down command
+    --lift-command=gcode: gcode lift command (separate lines with |)
+    --down-command=gcode: gcode down command (separate lines with |)
+    --init-code=gcode: gcode init commands (separate lines with |)
 
  The options with an asterisk are default off and can be turned off again by adding "no-" at the beginning to the long-form option, e.g., --no-stroke-all or --no-send.
 """)
@@ -749,7 +771,8 @@ if __name__ == '__main__':
                         'shading-angle=', 'shading-crosshatch', 'no-shading-crosshatch', 'shading-avoid-outline',
                         'pause-at-start', 'no-pause-at-start', 'min-x=', 'max-x=', 'min-y=', 'max-y=',
                         'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all', 'gcode-pause', 'dump-options', 'tab=', 'extract-color=', 'sort', 'no-sort', 'simulation', 'no-simulation', 'tool-offset=', 'overcut=',
-                        'boolean-shading-crosshatch=', 'boolean-sort=', 'tool-mode=', 'send-and-save=', 'direction=', 'lift-command=', 'down-command=' ], )
+                        'boolean-shading-crosshatch=', 'boolean-sort=', 'tool-mode=', 'send-and-save=', 'direction=', 'lift-command=', 'down-command=',
+                        'init-code=' ], )
 
         if len(args) + len(opts) == 0:
             raise getopt.GetoptError("invalid commandline")
@@ -923,6 +946,8 @@ if __name__ == '__main__':
                 plotter.liftCommand = arg
             elif opt == '--down-command':
                 plotter.downCommand = arg
+            elif opt == '--init-code':
+                plotter.initCode = arg
             else:
                 raise ValueError("Unrecognized argument "+opt)
             i += 1
@@ -996,6 +1021,7 @@ if __name__ == '__main__':
         print('comment=' + comment)
         print('lift-command=' + ('none' if plotter.liftCommand is None else plotter.liftCommand))
         print('down-command=' + ('none' if plotter.downCommand is None else plotter.downCommand))
+        print('init-code=' + ('none' if plotter.initCode is None else plotter.initCode))
 
         sys.exit(0)
 
@@ -1007,10 +1033,8 @@ if __name__ == '__main__':
     elif toolMode == 'draw':
         toolOffset = 0.
         sortPaths = False
-
-    variables = {'lift':plotter.liftDeltaZ, 'work':plotter.workZ, 'safe':plotter.safeDeltaZ, 'left':plotter.xyMin[0],
-        'bottom':plotter.xyMin[1]}
-    formulas = {'right':str(plotter.xyMax[0]), 'top':str(plotter.xyMax[1]), 'up':'work+lift', 'park':'work+safe', 'centerx':'(left+right)/2.', 'centery':'(top+bottom)/2.'}
+        
+    plotter.updateVariables()
 
     if len(args) == 0:
         if not pauseAtStart:
