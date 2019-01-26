@@ -78,7 +78,7 @@ def processCode(code):
     
     data = tuple( evaluate(expr, plotter.variables, plotter.formulas) for expr in re.findall(pattern, code))
         
-    formatString = re.sub(pattern, '', code.replace('\\n', '\n'))
+    formatString = re.sub(pattern, '', code.replace('|', '\n'))
     
     return [formatString % data]
         
@@ -669,15 +669,19 @@ def fixComments(plotter, data, comment = ";"):
     if comment == ";":
         return data
     out = []
-    for line in data:
-        ind = line.index(";")
-        if ind >= 0:
-            if not plotter.comment:
-                out.append( ind[:ind].strip() )
-            else:
-                out.append( ind[:ind] + comment[0] + ind[ind+1:] + comment[1:] )
-        else:
-            out.append(data)
+    for command in data:
+        for line in command.split('\n'):
+            try:
+                ind = line.index(";")
+                if ind >= 0:
+                    if not comment:
+                        out.append( line[:ind].strip() )
+                    else:
+                        out.append( line[:ind] + comment[0] + line[ind+1:] + comment[1:] )
+                else:
+                    out.append(line)
+            except ValueError:
+                out.append(line)
     return out
 
 if __name__ == '__main__':
@@ -761,6 +765,9 @@ if __name__ == '__main__':
     comment = ";"
     sendAndSave = False
     directionAngle = None
+    
+    def maybeNone(a):
+        return None if a=='none' else a
 
     try:
         opts, args = getopt.getopt(sys.argv[1:], "e:UR:Uhdulw:P:o:Oc:LT:M:m:A:XHrf:na:D:t:s:S:x:y:z:Z:p:f:F:",
@@ -772,7 +779,7 @@ if __name__ == '__main__':
                         'pause-at-start', 'no-pause-at-start', 'min-x=', 'max-x=', 'min-y=', 'max-y=',
                         'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all', 'gcode-pause', 'dump-options', 'tab=', 'extract-color=', 'sort', 'no-sort', 'simulation', 'no-simulation', 'tool-offset=', 'overcut=',
                         'boolean-shading-crosshatch=', 'boolean-sort=', 'tool-mode=', 'send-and-save=', 'direction=', 'lift-command=', 'down-command=',
-                        'init-code=' ], )
+                        'init-code=', 'comment-delimiters=' ], )
 
         if len(args) + len(opts) == 0:
             raise getopt.GetoptError("invalid commandline")
@@ -943,11 +950,13 @@ if __name__ == '__main__':
                 else:
                     directionAngle = float(arg)
             elif opt == '--lift-command':
-                plotter.liftCommand = arg
+                plotter.liftCommand = maybeNone(arg)
             elif opt == '--down-command':
-                plotter.downCommand = arg
+                plotter.downCommand = maybeNone(arg)
             elif opt == '--init-code':
-                plotter.initCode = arg
+                plotter.initCode = maybeNone(arg)
+            elif opt == '--comment-delimiters':
+                plotter.comment = maybeNone(arg)
             else:
                 raise ValueError("Unrecognized argument "+opt)
             i += 1
@@ -1022,6 +1031,7 @@ if __name__ == '__main__':
         print('lift-command=' + ('none' if plotter.liftCommand is None else plotter.liftCommand))
         print('down-command=' + ('none' if plotter.downCommand is None else plotter.downCommand))
         print('init-code=' + ('none' if plotter.initCode is None else plotter.initCode))
+        print('comment-delimiters=' + ('none' if plotter.comment is None else plotter.comment))
 
         sys.exit(0)
 
@@ -1045,7 +1055,7 @@ if __name__ == '__main__':
             sys.exit(1)
         import gcodeplotutils.sendgcode as sendgcode
 
-        sendgcode.sendGcode(port=sendPort, speed=sendSpeed, commands=gcodeHeader(plotter) + [gcodePause], gcodePause=gcodePause, variables=variables, formulas=formulas)
+        sendgcode.sendGcode(port=sendPort, speed=sendSpeed, commands=gcodeHeader(plotter) + [gcodePause], gcodePause=gcodePause, variables=plotter.variables, formulas=plotter.formulas)
         sys.exit(0)
 
     with open(args[0]) as f:
@@ -1118,13 +1128,13 @@ if __name__ == '__main__':
             if hpglOut:
                 sendgcode.sendHPGL(port=sendPort, speed=sendSpeed, commands=g)
             else:
-                sendgcode.sendGcode(port=sendPort, speed=sendSpeed, commands=g, gcodePause=gcodePause, plotter=plotter, variables=variables, formulas=formulas)
+                sendgcode.sendGcode(port=sendPort, speed=sendSpeed, commands=g, gcodePause=gcodePause, plotter=plotter, variables=plotter.variables, formulas=plotter.formulas)
 
         if dump:
             if hpglOut:
                 sys.stdout.write(g)
             else:
-                print('\n'.join(fixComments(plotter, g, comment=comment)))
+                print('\n'.join(fixComments(plotter, g, comment=plotter.comment)))
 
     else:
         sys.stderr.write("No points.")
