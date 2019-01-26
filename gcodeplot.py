@@ -49,6 +49,7 @@ class Plotter(object):
         self.safeLiftCommand = safeLiftCommand
         self.downCommand = downCommand
         self.initCode = initCode
+        self.comment = comment
 
     def inRange(self, point):
         for i in range(2):
