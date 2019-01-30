@@ -55,7 +55,7 @@ class Plotter(object):
 
     def inRange(self, point):
         for i in range(2):
-            if point[i] < self.xyMin[i] or point[i] > self.xyMax[i]:
+            if point[i] < self.xyMin[i]-.001 or point[i] > self.xyMax[i]+.001:
                 return False
         return True
 
@@ -1020,6 +1020,9 @@ if __name__ == '__main__':
         print('safe-delta-z=%g' % (plotter.safeDeltaZ))
         print('lift-delta-z=%g' % (plotter.liftDeltaZ))
         print('work-z=%g' % (plotter.workZ))
+        print('pen-down-speed=%g' % (plotter.drawSpeed))
+        print('pen-up-speed=%g' % (plotter.moveSpeed))
+        print('z-speed=%g' % (plotter.zSpeed))
         print('hpgl-out' if hpglOut else 'no-hpgl-out')
         print('shading-threshold=%g' % (shader.unshadedThreshold))
         print('shading-lightest=%g' % (shader.lightestSpacing))
