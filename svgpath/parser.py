@@ -503,7 +503,7 @@ def getPathsFromSVG(svg):
                 if len(cmd) >= 3 and cmd[2] != '':
                     y = float(cmd[2])
                 else:
-                    y = 1
+                    y = x
                 updateMatrix = reorder(x,0,0, y,0,0)
             elif cmd[0] == 'rotate':
                 theta = float(cmd[1]) * math.pi / 180.
