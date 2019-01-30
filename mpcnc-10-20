@@ -11,6 +11,9 @@ area=0,0,400,400
 input-dpi=1016,1016
 safe-delta-z=20
 lift-delta-z=10
+pen-up-speed=40
+pen-down-speed=35
+z-speed=15
 work-z=0
 no-hpgl-out
 shading-threshold=1
