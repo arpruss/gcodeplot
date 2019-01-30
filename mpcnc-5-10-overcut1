@@ -1,4 +1,4 @@
-# lower left corner of work is 20mm below current point
+# lower left corner of work is 10mm below start point
 no-allow-repeats
 gcode-pause=@pause
 scale=none
