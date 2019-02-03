@@ -16,7 +16,7 @@ pen-down-speed=15
 z-speed=15
 work-z=0
 no-hpgl-out
-shading-threshold=1
+shading-threshold=0
 shading-lightest=3
 shading-darkest=0.5
 shading-angle=45
