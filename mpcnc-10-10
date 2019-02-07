@@ -7,7 +7,7 @@ align-y=none
 tolerance=0.05
 no-send
 send-speed=115200
-area=0,0,400,400
+area=0,0,609.6,406.4
 input-dpi=1016,1016
 safe-delta-z=10
 lift-delta-z=10
@@ -17,8 +17,8 @@ z-speed=15
 work-z=0
 no-hpgl-out
 shading-threshold=1
-shading-lightest=3
-shading-darkest=0.5
+shading-lightest=4
+shading-darkest=2
 shading-angle=45
 no-shading-crosshatch
 no-stroke-all
