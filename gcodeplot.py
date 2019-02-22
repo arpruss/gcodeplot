@@ -1095,22 +1095,22 @@ if __name__ == '__main__':
     if doDedup:
         penData = dedup(penData)
 
-    if toolOffset > 0. or overcut > 0.:
-        if scalingMode != SCALE_NONE:
-            sys.stderr.write("Scaling with tool-offset > 0 will produce unpredictable results.\n")
-        op = OffsetProcessor(toolOffset=toolOffset, overcut=overcut, tolerance=tolerance)
+    if sortPaths:
         for pen in penData:
-            penData[pen] = op.processPath(penData[pen])
+            penData[pen] = safeSorted(penData[pen], comparison=comparePaths)
+        penData = removePenBob(penData)
 
     if optimizationTime > 0. and directionAngle is None:
         for pen in penData:
             penData[pen] = anneal.optimize(penData[pen], timeout=optimizationTime/2., quiet=quiet)
         penData = removePenBob(penData)
 
-    if sortPaths:
+    if toolOffset > 0. or overcut > 0.:
+        if scalingMode != SCALE_NONE:
+            sys.stderr.write("Scaling with tool-offset > 0 will produce unpredictable results.\n")
+        op = OffsetProcessor(toolOffset=toolOffset, overcut=overcut, tolerance=tolerance)
         for pen in penData:
-            penData[pen] = safeSorted(penData[pen], comparison=comparePaths)
-        penData = removePenBob(penData)
+            penData[pen] = op.processPath(penData[pen])
 
     if directionAngle is not None:
         for pen in penData:

@@ -250,7 +250,8 @@ def parse_path(pathdef, current_pos=0j, matrix = None, svgState=None):
             # Close path
             if current_pos != start_pos:
                 segments.append(path.Line(scaler(current_pos), scaler(start_pos)))
-            segments.closed = True
+            if len(segments):
+                segments.closed = True
             current_pos = start_pos
             start_pos = None
             command = None  # You can't have implicit commands after closing.
@@ -546,7 +547,8 @@ def getPathsFromSVG(svg):
         state, matrix = updateStateAndMatrix(tree, state, matrix)
         if tag == 'path':
             path = parse_path(tree.attrib['d'], matrix=matrix, svgState=state)
-            paths.append(path)
+            if len(path):
+                paths.append(path)
         elif tag == 'circle':
             path = path_from_ellipse(getFloat('cx'), getFloat('cy'), getFloat('r'), getFloat('r'), matrix, state)
             paths.append(path)
