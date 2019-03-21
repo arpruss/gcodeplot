@@ -83,6 +83,8 @@
       <param name="tool-offset" type="float" min="0" max="1000" precision="2" _gui-text="Tool offset (mm):" _gui-description="Horizontal distance from tool rotation axis to cutting tip (default: 1)">1</param>
       <param name="overcut" type="float" min="0" max="1000" precision="2" _gui-text="Overcut (mm):" _gui-description="Extra cut distance for closed curves (default: 1)">1</param>
       <param name="boolean-sort" type="boolean" _gui-text="Inside-out sorting" _gui-description="Cut inside curves first">1</param>
+      <param name="lift-command" type="string" _gui-text="Lift Command" _gui-description="Gcode command to lift the pen/blade"></param>
+      <param name="down-command" type="string" _gui-text="Down Command" _gui-description="Gcode command to lower the pen/blade"></param>
     </page>
   </param>
   <output>

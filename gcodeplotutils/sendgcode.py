@@ -3,6 +3,8 @@ import time
 import os
 import re
 import sys
+from .evaluate import *
+
 try:
     from serial import Serial
 except:
@@ -33,13 +35,6 @@ class FakeSerial(object):
     def close(self):
         if self.handle is not sys.stdout:
             self.handle.close()
-            
-SAFE_EVAL_RE = re.compile(r'^[-+/*()eE0-9.]+$')
-
-def safeEval(string):
-    if not SAFE_EVAL_RE.match(string):
-        raise ValueError()
-    return eval(string)
             
 def sendHPGL(port, commands):
     s = Serial(port, 115200)
@@ -78,22 +73,6 @@ def sendGcode(port, commands, speed=115200, quiet = False, gcodePause="@pause", 
 ## TODO: flow control  
     state.lineNumber = 2
     
-    def evaluate(value, MAX_DEPTH=100):
-        tryAgain = True
-        depth = 0
-        while tryAgain and depth<MAX_DEPTH:
-            tryAgain = False
-            for x in formulas:
-                value,n = re.subn(r'\b' + x + r'\b', '('+formulas[x]+')', value)
-                if n > 0: tryAgain = True
-            for x in variables:
-                value,n = re.subn(r'\b' + x + r'\b', repr(variables[x]), value)
-                if n > 0: tryAgain = True
-            depth += 1
-        if depth >= MAX_DEPTH:
-            raise ValueError()
-        return safeEval(value)
-
     def sendCommand(c):
         def checksum(text):
             cs = 0
@@ -108,7 +87,7 @@ def sendGcode(port, commands, speed=115200, quiet = False, gcodePause="@pause", 
                 for subst in re.split(r'\s+', components[1].split('!!', 2)[1].strip()):
                     axis = subst[0]
                     try:
-                        value = evaluate(subst[1:])
+                        value = evaluate(subst[1:],variables,formulas)
                         c = re.sub(r'\b' + axis + r'[0-9.\-]+', '%s%.3f' % (axis, value), c)
                     except ValueError:
                         pass
@@ -164,7 +143,7 @@ Commands available:
                             value = float(formulas[var])
                             out.append("%s=%.5g" % (var, value))
                         except ValueError:
-                            out.append("%s=%s=%.5g" % (var, formulas[var], evaluate(formulas[var])))
+                            out.append("%s=%s=%.5g" % (var, formulas[var], evaluate(formulas[var],variables,formulas)))
                     print('\t'.join(out))
                 
             showVariables()
@@ -179,7 +158,7 @@ Commands available:
                         var,value = re.split(r'\s*=\s*', cmd, maxsplit=2)
                         if var in formulas:
                             raise ValueError()
-                        variables[var] = evaluate(value)
+                        variables[var] = evaluate(value,variables,formulas)
                     except:
                         print("Syntax error.")
                     showVariables()
@@ -210,9 +189,9 @@ Commands available:
                                 else:
                                     valueString = part[1:]
                                 if valueString[0] == '+':
-                                    value = variables[part[0]] + evaluate(valueString[1:])
+                                    value = variables[part[0]] + evaluate(valueString[1:],variables,formulas)
                                 else:
-                                    value = evaluate(valueString)
+                                    value = evaluate(valueString,variables,formulas)
                                 if part[0] == 'z':
                                     zMove = 'G0 F%.1f Z%.3f; pen up' % (600 if plotter is None else plotter.zSpeed*60., value)
                                 elif part[0] == 'x':

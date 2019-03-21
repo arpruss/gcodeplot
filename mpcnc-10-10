@@ -1,0 +1,37 @@
+# lower left corner of work is 20mm below current point
+no-allow-repeats
+gcode-pause=@pause
+scale=none
+align-x=none
+align-y=none
+tolerance=0.05
+no-send
+send-speed=115200
+area=0,0,609.6,406.4
+input-dpi=1016,1016
+safe-delta-z=10
+lift-delta-z=10
+pen-up-speed=40
+pen-down-speed=35
+z-speed=15
+work-z=0
+no-hpgl-out
+shading-threshold=1
+shading-lightest=4
+shading-darkest=2
+shading-angle=45
+no-shading-crosshatch
+no-stroke-all
+optimization-time=30
+no-sort
+no-pause-at-start
+extract-color=all
+tool-offset=0.000
+overcut=0.000
+no-simulation
+direction=none
+lift-command=none
+down-command=none
+init-code=G90|G92 X0 Y0 Z%.1f{{park}}
+end-code=G1 F%.1f{{60*zspeed}} Z%.1f{{park}}|G1 F%.1f{{60*movespeed}} X0 Y0
+comment-delimiters=;
