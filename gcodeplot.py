@@ -11,6 +11,7 @@ import cmath
 from random import sample
 from svgpath.shader import Shader
 from gcodeplotutils.processoffset import OffsetProcessor
+from gcodeplotutils.evaluate import evaluate
 
 SCALE_NONE = 0
 SCALE_DOWN_ONLY = 1
@@ -23,9 +24,20 @@ ALIGN_RIGHT = ALIGN_TOP
 ALIGN_CENTER = 3
 
 class Plotter(object):
-    def __init__(self, xyMin=(7,8), xyMax=(204,178), 
+    def __init__(self, xyMin=(7,8), xyMax=(204,178),
             drawSpeed=35, moveSpeed=40, zSpeed=5, workZ = 14.5, liftDeltaZ = 2.5, safeDeltaZ = 20,
-            liftCommand=None, safeLiftCommand=None, downCommand=None, comment=";"):
+            liftCommand=None, safeLiftCommand=None, downCommand=None, comment=";",
+            initCode = "G00 S1; endstops|"
+                       "G00 E0; no extrusion|"
+                       "G01 S1; endstops|"
+                       "G01 E0; no extrusion|"
+                       "G21; millimeters|"
+                       "G91 G0 F%.1f{{zspeed*60}} Z%.3f{{safe}}; pen park !!Zsafe|"
+                       "G90; absolute|"
+                       "G28 X; home|"
+                       "G28 Y; home|"
+                       "G28 Z; home",
+            endCode=None):
         self.xyMin = xyMin
         self.xyMax = xyMax
         self.drawSpeed = drawSpeed
@@ -37,34 +49,45 @@ class Plotter(object):
         self.liftCommand = liftCommand
         self.safeLiftCommand = safeLiftCommand
         self.downCommand = downCommand
-        
+        self.initCode = initCode
+        self.endCode = endCode
+        self.comment = comment
+
     def inRange(self, point):
         for i in range(2):
-            if point[i] < self.xyMin[i] or point[i] > self.xyMax[i]:
+            if point[i] < self.xyMin[i]-.001 or point[i] > self.xyMax[i]+.001:
                 return False
         return True
-        
+
     @property
     def safeUpZ(self):
         return self.workZ + self.safeDeltaZ
-        
+
     @property
     def penUpZ(self):
         return self.workZ + self.liftDeltaZ
         
+    def updateVariables(self):
+        self.variables = {'lift':self.liftDeltaZ, 'work':self.workZ, 'safe':self.safeDeltaZ, 'left':self.xyMin[0],
+            'bottom':self.xyMin[1], 'zspeed':self.zSpeed, 'movespeed':self.moveSpeed}
+        self.formulas = {'right':str(self.xyMax[0]), 'top':str(self.xyMax[1]), 'up':'work+lift', 'park':'work+safe', 'centerx':'(left+right)/2.', 'centery':'(top+bottom)/2.'}
+
+def processCode(code):
+    if not code:
+        return []
+
+    data = []
+    pattern = r'\{\{([^}]+)\}\}'
+    
+    data = tuple( evaluate(expr, plotter.variables, plotter.formulas) for expr in re.findall(pattern, code))
+
+        
+    formatString = re.sub(pattern, '', code.replace('|', '\n'))
+    
+    return [formatString % data]
+        
 def gcodeHeader(plotter):
-    gcode = []
-    gcode.append('G00 S1; endstops')
-    gcode.append('G00 E0; no extrusion')
-    gcode.append('G01 S1; endstops')
-    gcode.append('G01 E0; no extrusion')
-    gcode.append('G21; millimeters')
-    gcode.append('G91 G0 F%.1f Z%.3f; pen park !!Zsafe' % (plotter.zSpeed*60., plotter.safeDeltaZ))
-    gcode.append('G90; absolute')
-    gcode.append('G28 X; home')
-    gcode.append('G28 Y; home')
-    gcode.append('G28 Z; home')
-    return gcode
+    return processCode(plotter.initCode)
 
 def isSameColor(rgb1, rgb2):
     if rgb1 is None or rgb2 is None:
@@ -83,16 +106,16 @@ class Pen(object):
         self.pen = int(data[0])
         self.offset = tuple(map(float, re.sub(r'[()]',r'',data[1]).split(',')))
         self.color = parser.rgbFromColor(data[2])
-        self.name = data[3]        
+        self.name = data[3]
 
 class Scale(object):
     def __init__(self, scale=(1.,1.), offset=(0.,0.)):
         self.offset = offset
         self.scale = scale
-        
+
     def clone(self):
         return Scale(scale=[self.scale[0],self.scale[1]], offset=[self.offset[0],self.offset[1]])
-        
+
     def __repr__(self):
         return str(self.scale)+','+str(self.offset)
 
@@ -104,31 +127,31 @@ class Scale(object):
             if delta == 0:
                 s[i] = 1.
             else:
-                s[i] = (plotter.xyMax[i]-plotter.xyMin[i]) / delta
+                s[i] = (self.xyMax[i]-self.xyMin[i]) / delta
         self.scale = [min(s),min(s)]
-        self.offset = list(plotter.xyMin[i] - xyMin[i]*self.scale[i] for i in range(2))
-        
+        self.offset = list(self.xyMin[i] - xyMin[i]*self.scale[i] for i in range(2))
+
     def align(self, plotter, xyMin, xyMax, align):
         o = [0,0]
         for i in range(2):
             if align[i] == ALIGN_LEFT:
-                o[i] = plotter.xyMin[i] - self.scale[i]*xyMin[i]
+                o[i] = self.xyMin[i] - self.scale[i]*xyMin[i]
             elif align[i] == ALIGN_RIGHT:
-                o[i] = plotter.xyMax[i] - self.scale[i]*xyMax[i]
+                o[i] = self.xyMax[i] - self.scale[i]*xyMax[i]
             elif align[i] == ALIGN_NONE:
-                o[i] = self.offset[i] # plotter.xyMin[i]
+                o[i] = self.offset[i] # self.xyMin[i]
             elif align[i] == ALIGN_CENTER:
-                o[i] = 0.5 * (plotter.xyMin[i] - self.scale[i]*xyMin[i] + plotter.xyMax[i] - self.scale[i]*xyMax[i])            
+                o[i] = 0.5 * (self.xyMin[i] - self.scale[i]*xyMin[i] + self.xyMax[i] - self.scale[i]*xyMax[i])
             else:
                 raise ValueError()
-        self.offset = o                
-        
+        self.offset = o
+
     def scalePoint(self, point):
         return (point[0]*self.scale[0]+self.offset[0], point[1]*self.scale[1]+self.offset[1])
-        
+
 def comparison(a,b):
     return 1 if a>b else (-1 if a<b else 0)
-        
+
 def safeSorted(data,comparison=comparison):
     """
     A simpleminded recursive merge sort that will work even if the comparison function fails to be a partial order.
@@ -155,23 +178,23 @@ def safeSorted(data,comparison=comparison):
     elif i2 < len(d2):
         out += d2[i2:]
     return out
-        
+
 def comparePaths(path1,path2,tolerance=0.05,pointsToCheck=3):
     """
     inner paths come before outer ones
     closed paths come before open ones
     otherwise, average left to right movement
     """
-    
+
     def fixPath(path):
         out = [complex(point[0],point[1]) for point in path]
         if out[0] != out[-1] and abs(out[0]-out[-1]) <= tolerance:
-            out.append(out[0]) 
+            out.append(out[0])
         return out
-        
+
     def closed(path):
         return path[-1] == path[0]
-        
+
     def inside(z, path):
         for p in path:
             if p == z:
@@ -182,7 +205,7 @@ def comparePaths(path1,path2,tolerance=0.05,pointsToCheck=3):
             if len(phases) == 1:
                 # should not happen
                 bestPhase = phases[0] + math.pi
-            else:    
+            else:
                 bestIndex = max( (phases[i+1]-phases[i],i) for i in range(len(phases)-1))[1]
                 bestPhase = (phases[bestIndex+1]+phases[bestIndex])/2.
             ray = cmath.rect(1., bestPhase)
@@ -205,10 +228,10 @@ def comparePaths(path1,path2,tolerance=0.05,pointsToCheck=3):
                     else:
                         s -= 1
             return s != 0
-                
+
         except OverflowError:
             return False
-        
+
     def nestedPaths(path1, path2):
         if not closed(path2):
             return False
@@ -217,10 +240,10 @@ def comparePaths(path1,path2,tolerance=0.05,pointsToCheck=3):
             if inside(point, path2):
                 return True
         return False
-        
+
     path1 = fixPath(path1)
     path2 = fixPath(path2)
-    
+
     if nestedPaths(path1, path2):
         return -1
     elif nestedPaths(path2, path1):
@@ -239,7 +262,7 @@ def removePenBob(data):
     """
 
     outData = {}
-    
+
     for pen in data:
         outSegments = []
         outSegment = []
@@ -252,28 +275,28 @@ def removePenBob(data):
             else:
                 outSegments.append(outSegment)
                 outSegment = list(segment)
-                
+
         if outSegment:
             outSegments.append(outSegment)
-            
+
         if outSegments:
             outData[pen] = outSegments
-        
+
     return outData
-        
+
 def dedup(data):
     curPoint = None
-    
+
     def d2(a,b):
         return (a[0]-b[0])**2+(a[1]-b[1])**2
-        
+
     newData = {}
-        
+
     for pen in data:
         newSegments = []
         newSegment = []
         draws = set()
-        
+
         for segment in data[pen]:
             newSegment = [segment[0]]
             for i in range(1,len(segment)):
@@ -282,38 +305,38 @@ def dedup(data):
                     if len(newSegment)>1:
                         newSegments.append(newSegment)
                     newSegment = [segment[i]]
-                else:        
+                else:
                     draws.add(draw)
                     newSegment.append(segment[i])
             if newSegment:
                 newSegments.append(newSegment)
-                
+
         if newSegments:
             newData[pen] = newSegments
 
     return removePenBob(newData)
-    
+
 def describePen(pens, pen):
     if pens is not None and pen in pens:
         return pens[pen].description
     else:
         return str(pen)
-        
+
 def penColor(pens, pen):
     if pens is not None and pen in pens:
         return pens[pen].color
     else:
         return (0.,0.,0.)
-        
+
 def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align = None, tolerance=0, gcodePause="@pause", pauseAtStart = False, simulation = False):
     if len(data) == 0:
         return None
 
     xyMin = [float("inf"),float("inf")]
     xyMax = [float("-inf"),float("-inf")]
-    
+
     allFit = True
-    
+
     scale = Scale()
     scale.offset = (plotter.xyMin[0],plotter.xyMin[1])
 
@@ -335,22 +358,24 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
             return None
         scale = Scale()
         scale.fit(plotter, xyMin, xyMax)
-       
+
     if align is not None:
         scale.align(plotter, xyMin, xyMax, align)
-        
+
     if not simulation:
         gcode = gcodeHeader(plotter)
     else:
         gcode = []
         gcode.append('<?xml version="1.0" standalone="yes"?>')
-        gcode.append('<svg width="%.4fmm" height="%.4fmm" viewBox="%.4f %.4f %.4f %.4f" xmlns="http://www.w3.org/2000/svg" version="1.1">' % ( 
+        gcode.append('<svg width="%.4fmm" height="%.4fmm" viewBox="%.4f %.4f %.4f %.4f" xmlns="http://www.w3.org/2000/svg" version="1.1">' % (
             plotter.xyMax[0]-plotter.xyMin[0], plotter.xyMax[1]-plotter.xyMin[0], plotter.xyMin[0], plotter.xyMin[1], plotter.xyMax[0], plotter.xyMax[1]))
-        
+            
+            
     def park():
         if not simulation:
-            if plotter.safeLiftCommand:
-                gcode.append(plotter.safeLiftCommand)
+            lift = plotter.safeLiftCommand or plotter.liftCommand
+            if lift:
+                gcode.extend(processCode(lift))
             else:
                 gcode.append('G00 F%.1f Z%.3f; pen park !!Zpark' % (plotter.zSpeed*60., plotter.safeUpZ))
 
@@ -358,35 +383,37 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
     if not simulation:
         gcode.append('G00 F%.1f Y%.3f; !!Ybottom' % (plotter.moveSpeed*60.,   plotter.xyMin[1]))
         gcode.append('G00 F%.1f X%.3f; !!Xleft' % (plotter.moveSpeed*60.,   plotter.xyMin[0]))
-    
+
     class State(object):
         pass
-        
+
     state = State()
     state.time = (plotter.xyMin[1]+plotter.xyMin[0]) / plotter.moveSpeed
     state.curXY = plotter.xyMin
     state.curZ = plotter.safeUpZ
     state.penColor = (0.,0.,0.)
-    
+
     def distance(a,b):
         return math.hypot(a[0]-b[0],a[1]-b[1])
-    
+
     def penUp(force=False):
-        if not simulation and plotter.liftCommand:
-            gcode.append(plotter.liftCommand)
-        elif state.curZ is None or state.curZ < plotter.penUpZ or force:
+        if state.curZ is None or state.curZ not in (plotter.safeUpZ, plotter.penUpZ) or force:
             if not simulation:
-                gcode.append('G00 F%.1f Z%.3f; pen up !!Zup' % (plotter.zSpeed*60., plotter.penUpZ))
+                if plotter.liftCommand:
+                    gcode.extend(processCode(plotter.liftCommand))
+                else:
+                    gcode.append('G00 F%.1f Z%.3f; pen up !!Zup' % (plotter.zSpeed*60., plotter.penUpZ))
             if state.curZ is not None:
                 state.time += abs(plotter.penUpZ-state.curZ) / plotter.zSpeed
             state.curZ = plotter.penUpZ
-        
+
     def penDown(force=False):
-        if not simulation and plotter.downCommand:
-            gcode.append(plotter.downCommand)
         if state.curZ is None or state.curZ != plotter.workZ or force:
             if not simulation:
-                gcode.append('G00 F%.1f Z%.3f; pen down !!Zwork' % (plotter.zSpeed*60., plotter.workZ))
+                if plotter.downCommand:
+                    gcode.extend(processCode(plotter.downCommand))
+                else:
+                    gcode.append('G00 F%.1f Z%.3f; pen down !!Zwork' % (plotter.zSpeed*60., plotter.workZ))
             state.time += abs(state.curZ-plotter.workZ) / plotter.zSpeed
             state.curZ = plotter.workZ
 
@@ -411,27 +438,27 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
                 color = [int(math.floor(255*x+0.5)) for x in (state.penColor if down else (0,0.5,0))]
                 thickness = 0.15 if down else 0.1
                 end = complex(p[0], flip(p[1]))
-                gcode.append('<line x1="%.3f" y1="%.3f" x2="%.3f" y2="%.3f" stroke="rgb(%d,%d,%d)" stroke-width="%.2f"/>' 
+                gcode.append('<line x1="%.3f" y1="%.3f" x2="%.3f" y2="%.3f" stroke="rgb(%d,%d,%d)" stroke-width="%.2f"/>'
                     % (start[0], flip(start[1]), end.real, end.imag, color[0], color[1], color[2], thickness))
                 ray = end - complex(start[0],flip(start[1]))
                 if abs(ray)>0:
                     ray = ray/abs(ray)
                     for theta in [math.pi * 0.8,-math.pi * 0.8]:
                         head = end + ray * cmath.rect(max(0.3,min(2,d*0.25)), theta)
-                        gcode.append('<line x1="%.3f" y1="%.3f" x2="%.3f" y2="%.3f" stroke="rgb(0,128,0)" stroke-linejoin="round" stroke-width="0.1"/>' 
+                        gcode.append('<line x1="%.3f" y1="%.3f" x2="%.3f" y2="%.3f" stroke="rgb(0,128,0)" stroke-linejoin="round" stroke-width="0.1"/>'
                             % (end.real, end.imag, head.real, head.imag))
-                
+
             if state.curXY is not None:
                 state.time += d / speed
             state.curXY = p
-            
+
     for pen in sorted(data):
         if pen is not 1:
             state.curZ = None
             state.curXY = None
-            
+
         state.penColor = penColor(pens, pen)
-            
+
         s = scale.clone()
 
         if pens is not None and pen in pens:
@@ -441,26 +468,28 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
 
         for segment in data[pen]:
             penMove(False, plotter.moveSpeed, s.scalePoint(segment[0]))
-            
+
             if newPen and (pen != 1 or pauseAtStart) and not simulation:
                 gcode.append( gcodePause+' load pen: ' + describePen(pens,pen) )
                 penMove(False, plotter.moveSpeed, s.scalePoint(segment[0]), force=True)
             newPen = False
-            
+
             for i in range(1,len(segment)):
                 penMove(True, plotter.drawSpeed, s.scalePoint(segment[i]))
 
     park()
-    
+
     if simulation:
         gcode.append('</svg>')
+    else:
+        gcode.extend(processCode(plotter.endCode))
 
     if not quiet:
         sys.stderr.write('Estimated printing time: %dm %.1fs\n' % (state.time // 60, state.time % 60))
         sys.stderr.flush()
-    
+
     return gcode
-    
+
 def parseHPGL(hpgl,dpi=(1016.,1016.)):
     try:
         scale = (25.4/dpi[0], 25.4/dpi[1])
@@ -470,7 +499,7 @@ def parseHPGL(hpgl,dpi=(1016.,1016.)):
     segment = []
     pen = 1
     data = {pen:[]}
-    
+
     for cmd in re.sub(r'\s', r'', hpgl).split(';'):
         if cmd.startswith('PD'):
             try:
@@ -487,7 +516,7 @@ def parseHPGL(hpgl,dpi=(1016.,1016.)):
                 coords = list(map(float, cmd[2:].split(',')))
                 segment = [(coords[-2]*scale[0], coords[-1]*scale[1])]
             except:
-                pass 
+                pass
                 # ignore no-movement PD/PU
         elif cmd.startswith('SP'):
             if segment:
@@ -500,12 +529,12 @@ def parseHPGL(hpgl,dpi=(1016.,1016.)):
             pass
         elif len(cmd) > 0:
             sys.stderr.write('Unknown command '+cmd[:2]+'\n')
-            
+
     if segment:
         data[pen].append(segment)
-        
+
     return data
-    
+
 def emitHPGL(data, pens=None):
     def hpglCoordinates(offset,point):
         x = (point[0]-offset[0]) * 1016. / 25.4
@@ -527,14 +556,14 @@ def emitHPGL(data, pens=None):
     hpgl.append('PU')
     hpgl.append('')
     return ';'.join(hpgl)
-    
+
 def getPen(pens, color):
     if pens is None:
         return 1
 
     if color is None:
         color = (0.,0.,0.)
-        
+
     bestD2 = 10
     bestPen = 1
 
@@ -544,21 +573,21 @@ def getPen(pens, color):
         if d2 < bestD2:
             bestPen = p
             bestD2 = d2
-            
+
     return bestPen
 
 def parseSVG(svgTree, tolerance=0.05, shader=None, strokeAll=False, pens=None, extractColor = None):
     data = {}
     for path in parser.getPathsFromSVG(svgTree)[0]:
         lines = []
-        
+
         stroke = strokeAll or (path.svgState.stroke is not None and (extractColor is None or isSameColor(path.svgState.stroke, extractColor)))
-        
+
         strokePen = getPen(pens, path.svgState.stroke)
 
         if strokePen not in data:
             data[strokePen] = []
-            
+
         for line in path.linearApproximation(error=tolerance):
             if stroke:
                 data[strokePen].append([(line.start.real,line.start.imag),(line.end.real,line.end.imag)])
@@ -569,23 +598,23 @@ def parseSVG(svgTree, tolerance=0.05, shader=None, strokeAll=False, pens=None, e
         if shader is not None and shader.isActive() and path.svgState.fill is not None and (extractColor is None or
                 isSameColor(path.svgStatefill, extractColor)):
             pen = getPen(pens, path.svgState.fill)
-            
+
             if pen not in data:
                 data[pen] = []
-        
-            grayscale = sum(path.svgState.fill) / 3. 
+
+            grayscale = sum(path.svgState.fill) / 3.
             mode = Shader.MODE_NONZERO if path.svgState.fillRule == 'nonzero' else Shader.MODE_EVEN_ODD
             if path.svgState.fillOpacity is not None:
                 grayscale = grayscale * path.svgState.fillOpacity + 1. - path.svgState.fillOpacity # TODO: real alpha!
             fillLines = shader.shade(lines, grayscale, avoidOutline=(path.svgState.stroke is None or strokePen != pen), mode=mode)
             for line in fillLines:
                 data[pen].append([(line[0].real,line[0].imag),(line[1].real,line[1].imag)])
-                
+
             if not data[pen]:
                 del data[pen]
 
     return data
-    
+
 def getConfigOpts(filename):
     opts = []
     with open(filename) as f:
@@ -606,10 +635,10 @@ def getConfigOpts(filename):
                     arg = None
                 opts.append( (opt,arg) )
     return opts
-    
+
 def directionalize(paths, angle, tolerance=1e-10):
     vector = (math.cos(angle * math.pi / 180.), math.sin(angle * math.pi / 180.))
-    
+
     outPaths = []
     for path in paths:
         startIndex = 0
@@ -639,24 +668,28 @@ def directionalize(paths, angle, tolerance=1e-10):
             outPaths.append(path[startIndex:i])
         else:
             outPaths.append(list(reversed(path[startIndex:i])))
-            
+
     return outPaths
-    
+
 def fixComments(plotter, data, comment = ";"):
     if comment == ";":
         return data
     out = []
-    for line in data:
-        ind = line.index(";")
-        if ind >= 0:
-            if not plotter.comment:
-                out.append( ind[:ind].strip() )
-            else:
-                out.append( ind[:ind] + comment[0] + ind[ind+1:] + comment[1:] )
-        else:
-            out.append(data)            
+    for command in data:
+        for line in command.split('\n'):
+            try:
+                ind = line.index(";")
+                if ind >= 0:
+                    if not comment:
+                        out.append( line[:ind].strip() )
+                    else:
+                        out.append( line[:ind] + comment[0] + line[ind+1:] + comment[1:] )
+                else:
+                    out.append(line)
+            except ValueError:
+                out.append(line)
     return out
-                    
+
 if __name__ == '__main__':
 
     def help(error=False):
@@ -701,13 +734,16 @@ if __name__ == '__main__':
     --comment-delimiters=xy: one or two characters specifying comment delimiters, e.g., ";" or "()"
     --tool-offset=x: cutting tool offset (millimeters) [default 0.0]
     --overcut=x: overcut (millimeters) [default 0.0]
- 
+    --lift-command=gcode: gcode lift command (separate lines with |)
+    --down-command=gcode: gcode down command (separate lines with |)
+    --init-code=gcode: gcode init commands (separate lines with |)
+
  The options with an asterisk are default off and can be turned off again by adding "no-" at the beginning to the long-form option, e.g., --no-stroke-all or --no-send.
 """)
-    
+
 
     tolerance = 0.05
-    doDedup = True    
+    doDedup = True
     sendPort = None
     sendSpeed = 115200
     hpglLength = 279.4
@@ -736,16 +772,20 @@ if __name__ == '__main__':
     sendAndSave = False
     directionAngle = None
     
+    def maybeNone(a):
+        return None if a=='none' else a
+
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "e:UR:Uhdulw:P:o:Oc:LT:M:m:A:XHrf:na:D:t:s:S:x:y:z:Z:p:f:F:", 
+        opts, args = getopt.getopt(sys.argv[1:], "e:UR:Uhdulw:P:o:Oc:LT:M:m:A:XHrf:na:D:t:s:S:x:y:z:Z:p:f:F:",
                         ["help", "down", "up", "lower-left", "allow-repeats", "no-allow-repeats", "scale=", "config-file=",
                         "area=", 'align-x=', 'align-y=', 'optimization-time=', "pens=",
                         'input-dpi=', 'tolerance=', 'send=', 'send-speed=', 'work-z=', 'lift-delta-z=', 'safe-delta-z=',
                         'pen-down-speed=', 'pen-up-speed=', 'z-speed=', 'hpgl-out', 'no-hpgl-out', 'shading-threshold=',
-                        'shading-angle=', 'shading-crosshatch', 'no-shading-crosshatch', 'shading-avoid-outline', 
+                        'shading-angle=', 'shading-crosshatch', 'no-shading-crosshatch', 'shading-avoid-outline',
                         'pause-at-start', 'no-pause-at-start', 'min-x=', 'max-x=', 'min-y=', 'max-y=',
-                        'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all', 'gcode-pause', 'dump-options', 'tab=', 'extract-color=', 'sort', 'no-sort', 'simulation', 'no-simulation', 'tool-offset=', 'overcut=', 
-                        'boolean-shading-crosshatch=', 'boolean-sort=', 'tool-mode=', 'send-and-save=', 'direction=' ], )
+                        'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all', 'gcode-pause', 'dump-options', 'tab=', 'extract-color=', 'sort', 'no-sort', 'simulation', 'no-simulation', 'tool-offset=', 'overcut=',
+                        'boolean-shading-crosshatch=', 'boolean-sort=', 'tool-mode=', 'send-and-save=', 'direction=', 'lift-command=', 'down-command=',
+                        'init-code=', 'comment-delimiters=', 'end-code=' ], )
 
         if len(args) + len(opts) == 0:
             raise getopt.GetoptError("invalid commandline")
@@ -766,7 +806,7 @@ if __name__ == '__main__':
                     for line in f:
                         if line.strip():
                             p = Pen(line)
-                            pens[p.pen] = p                            
+                            pens[p.pen] = p
             elif opt in ('-f', '--scale'):
                 arg = arg.lower()
                 if arg.startswith('n'):
@@ -915,20 +955,30 @@ if __name__ == '__main__':
                     directionAngle = None
                 else:
                     directionAngle = float(arg)
+            elif opt == '--lift-command':
+                plotter.liftCommand = maybeNone(arg)
+            elif opt == '--down-command':
+                plotter.downCommand = maybeNone(arg)
+            elif opt == '--init-code':
+                plotter.initCode = maybeNone(arg)
+            elif opt == '--end-code':
+                plotter.endCode = maybeNone(arg)
+            elif opt == '--comment-delimiters':
+                plotter.comment = maybeNone(arg)
             else:
                 raise ValueError("Unrecognized argument "+opt)
             i += 1
-        
+
     except getopt.GetoptError as e:
         sys.stderr.write(str(e)+"\n")
         help(error=True)
         sys.exit(2)
-        
+
     if doDump:
         print('no-allow-repeats' if doDedup else 'allow-repeats')
-        
+
         print('gcode-pause=' + gcodePause)
-        
+
         if penFilename is not None:
             print('pens=' + penFilename)
 
@@ -938,7 +988,7 @@ if __name__ == '__main__':
             print('scale=down')
         else:
             print('scale=fit')
-        
+
         if align[0] == ALIGN_LEFT:
             print('align-x=left')
         elif align[0] == ALIGN_CENTER:
@@ -947,7 +997,7 @@ if __name__ == '__main__':
             print('align-x=right')
         else:
             print('align-x=none')
-        
+
         if align[1] == ALIGN_BOTTOM:
             print('align-y=bottom')
         elif align[1] == ALIGN_CENTER:
@@ -956,21 +1006,24 @@ if __name__ == '__main__':
             print('align-y=top')
         else:
             print('align-y=none')
-            
+
         print('tolerance=' + str(tolerance))
-        
+
         if sendPort is not None:
             print('send=' + str(sendPort))
         else:
             print('no-send')
-            
+
         print('send-speed=' + str(sendSpeed))
         print('area=%g,%g,%g,%g' % tuple(list(plotter.xyMin)+list(plotter.xyMax)))
         print('input-dpi=%g,%g' % tuple(dpi))
         print('safe-delta-z=%g' % (plotter.safeDeltaZ))
         print('lift-delta-z=%g' % (plotter.liftDeltaZ))
         print('work-z=%g' % (plotter.workZ))
-        print('hpgl-out' if hpglOut else 'no-hpgl-out')        
+        print('pen-down-speed=%g' % (plotter.drawSpeed))
+        print('pen-up-speed=%g' % (plotter.moveSpeed))
+        print('z-speed=%g' % (plotter.zSpeed))
+        print('hpgl-out' if hpglOut else 'no-hpgl-out')
         print('shading-threshold=%g' % (shader.unshadedThreshold))
         print('shading-lightest=%g' % (shader.lightestSpacing))
         print('shading-darkest=%g' % (shader.darkestSpacing))
@@ -985,10 +1038,14 @@ if __name__ == '__main__':
         print('overcut=%.3f' % overcut)
         print('simulation' if svgSimulation else 'no-simulation')
         print('direction=' + ('none' if directionAngle is None else '%.3f'%directionAngle))
-        print('comment=' + comment)
-        
+        print('lift-command=' + ('none' if plotter.liftCommand is None else plotter.liftCommand))
+        print('down-command=' + ('none' if plotter.downCommand is None else plotter.downCommand))
+        print('init-code=' + ('none' if plotter.initCode is None else plotter.initCode))
+        print('end-code=' + ('none' if plotter.endCode is None else plotter.endCode))
+        print('comment-delimiters=' + ('none' if plotter.comment is None else plotter.comment))
+
         sys.exit(0)
-        
+
     if toolMode == 'cut':
         shader.unshadedThreshold = 0
         optimizationTime = 0
@@ -998,34 +1055,32 @@ if __name__ == '__main__':
         toolOffset = 0.
         sortPaths = False
         
-    variables = {'lift':plotter.liftDeltaZ, 'work':plotter.workZ, 'safe':plotter.safeDeltaZ, 'left':plotter.xyMin[0],
-        'bottom':plotter.xyMin[1]}
-    formulas = {'right':str(plotter.xyMax[0]), 'top':str(plotter.xyMax[1]), 'up':'work+lift', 'park':'work+safe', 'centerx':'(left+right)/2.', 'centery':'(top+bottom)/2.'}
-        
+    plotter.updateVariables()
+
     if len(args) == 0:
         if not pauseAtStart:
             help()
-        
+
         if sendPort is None:
             sys.stderr.write("Need to specify --send=port to be able to pause without any file.")
             sys.exit(1)
         import gcodeplotutils.sendgcode as sendgcode
 
-        sendgcode.sendGcode(port=sendPort, speed=sendSpeed, commands=gcodeHeader(plotter) + [gcodePause], gcodePause=gcodePause, variables=variables, formulas=formulas)
+        sendgcode.sendGcode(port=sendPort, speed=sendSpeed, commands=gcodeHeader(plotter) + [gcodePause], gcodePause=gcodePause, variables=plotter.variables, formulas=plotter.formulas)
         sys.exit(0)
 
     with open(args[0]) as f:
         data = f.read()
-        
-    svgTree = None    
-        
+
+    svgTree = None
+
     try:
         svgTree = ET.fromstring(data)
         if not 'svg' in svgTree.tag:
             svgTree = None
     except:
         svgTree = None
-        
+
     if svgTree is None and 'PD' not in data and 'PU' not in data:
         sys.stderr.write("Unrecognized file.\n")
         exit(1)
@@ -1036,32 +1091,32 @@ if __name__ == '__main__':
     else:
         penData = parseHPGL(data, dpi=dpi)
     penData = removePenBob(penData)
-    
+
     if doDedup:
         penData = dedup(penData)
-        
-    if toolOffset > 0.:
+
+    if sortPaths:
+        for pen in penData:
+            penData[pen] = safeSorted(penData[pen], comparison=comparePaths)
+        penData = removePenBob(penData)
+
+    if optimizationTime > 0. and directionAngle is None:
+        for pen in penData:
+            penData[pen] = anneal.optimize(penData[pen], timeout=optimizationTime/2., quiet=quiet)
+        penData = removePenBob(penData)
+
+    if toolOffset > 0. or overcut > 0.:
         if scalingMode != SCALE_NONE:
             sys.stderr.write("Scaling with tool-offset > 0 will produce unpredictable results.\n")
         op = OffsetProcessor(toolOffset=toolOffset, overcut=overcut, tolerance=tolerance)
         for pen in penData:
             penData[pen] = op.processPath(penData[pen])
 
-    if optimizationTime > 0. and directionAngle is None:
-        for pen in penData:
-            penData[pen] = anneal.optimize(penData[pen], timeout=optimizationTime/2., quiet=quiet)
-        penData = removePenBob(penData)
-        
-    if sortPaths:
-        for pen in penData:
-            penData[pen] = safeSorted(penData[pen], comparison=comparePaths)
-        penData = removePenBob(penData)
-        
     if directionAngle is not None:
         for pen in penData:
             penData[pen] = directionalize(penData[pen], directionAngle)
         penData = removePenBob(penData)
-        
+
     if len(penData) > 1:
         sys.stderr.write("Uses the following pens:\n")
         for pen in sorted(penData):
@@ -1070,29 +1125,29 @@ if __name__ == '__main__':
     if hpglOut and not svgSimulation:
         g = emitHPGL(penData, pens=pens)
     else:
-        g = emitGcode(penData, align=align, scalingMode=scalingMode, tolerance=tolerance, 
+        g = emitGcode(penData, align=align, scalingMode=scalingMode, tolerance=tolerance,
                 plotter=plotter, gcodePause=gcodePause, pens=pens, pauseAtStart=pauseAtStart, simulation=svgSimulation)
 
     if g:
         dump = True
-        
+
         if sendPort is not None and not svgSimulation:
             import gcodeplotutils.sendgcode as sendgcode
-            
+
             dump = sendAndSave
-                    
+
             if hpglOut:
                 sendgcode.sendHPGL(port=sendPort, speed=sendSpeed, commands=g)
             else:
-                sendgcode.sendGcode(port=sendPort, speed=sendSpeed, commands=g, gcodePause=gcodePause, plotter=plotter, variables=variables, formulas=formulas)
-        
+                sendgcode.sendGcode(port=sendPort, speed=sendSpeed, commands=g, gcodePause=gcodePause, plotter=plotter, variables=plotter.variables, formulas=plotter.formulas)
+
         if dump:
             if hpglOut:
                 sys.stdout.write(g)
             else:
-                print('\n'.join(fixComments(plotter, g, comment=comment)))
-    
+                print('\n'.join(fixComments(plotter, g, comment=plotter.comment)))
+
     else:
         sys.stderr.write("No points.")
         sys.exit(1)
-       
+
