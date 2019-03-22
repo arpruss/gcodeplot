@@ -20,7 +20,7 @@ maxFeatureThickness = 3;
 
 connectorThickness = 3;
 cuttingEdgeThickness = 1.5;
-demouldingPlateHeight = 4;
+demouldingPlateHeight = 0; // default off
 demouldingPlateSlack = 1.5;
 
 // sizing
@@ -213,9 +213,10 @@ def svgToCookieCutter(filename, tolerance=0.1, strokeAll = False):
     code.append('  cookieCutter();\n')
 
     code.append('// translate([-40,15,0]) cylinder(h=wallHeight+10,d=5,$fn=20); // handle')
-    code.append('mirror([1,0,0])')
-    code.append('  translate([%.3f*scale + wallFlareWidth/2,  %.3f*scale + wallFlareWidth/2,0])' % (-minXY[0],-minXY[1]))
-    code.append('  demouldingPlate();')
+    code.append('if (demouldingPlateHeight>0)')
+    code.append('  mirror([1,0,0])')
+    code.append('    translate([%.3f*scale + wallFlareWidth/2,  %.3f*scale + wallFlareWidth/2,0])' % (-minXY[0],-minXY[1]))
+    code.append('      demouldingPlate();')
 
     return '\n'.join(code).replace('$OVERALL_SIZE$', '%.3f' % size)
 
