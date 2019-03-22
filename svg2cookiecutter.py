@@ -45,12 +45,10 @@ module ribbon(points, thickness=1) {
 
 
 module wall(points,height,thickness) {
-    render(convexity=10) union() {
-        for (i=[1:len(points)-1]) {
-            hull() {
-                translate(points[i-1]) cylinder(h=height,d1=thickness,d2=cuttingEdgeThickness,$fn=8);
-                translate(points[i])   cylinder(h=height,d1=thickness,d2=cuttingEdgeThickness,$fn=8);
-            }
+    for (i=[1:len(points)-1]) {
+        hull() {
+            translate(points[i-1]) cylinder(h=height,d1=thickness,d2=cuttingEdgeThickness,$fn=8);
+            translate(points[i])   cylinder(h=height,d1=thickness,d2=cuttingEdgeThickness,$fn=8);
         }
     }
 }
