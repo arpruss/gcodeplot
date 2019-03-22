@@ -110,7 +110,7 @@ class Line(object):
 
 class OuterWall(Line):
     def __init__(self, pathName, points, fill, stroke, strokeWidth):
-        super().__init__(pathName, points, fill, stroke, strokeWidth)
+        super(OuterWall, self).__init__(pathName, points, fill, stroke, strokeWidth)
         self.height = "wallHeight"
         self.width = "wallThickness(%.3f)" % self.strokeWidth
         self.fillHeight = "wallHeight"
@@ -119,7 +119,7 @@ class OuterWall(Line):
 
 class InnerWall(Line):
     def __init__(self, pathName, points, fill, stroke, strokeWidth):
-        super().__init__(pathName, points, fill, stroke, strokeWidth)
+        super(InnerWall, self).__init__(pathName, points, fill, stroke, strokeWidth)
         self.height = "wallHeight"
         self.width = "insideWallThickness(%.3f)" % self.strokeWidth
         self.fillHeight = "wallHeight"
@@ -128,7 +128,7 @@ class InnerWall(Line):
 
 class Feature(Line):
     def __init__(self, pathName, points, fill, stroke, strokeWidth):
-        super().__init__(pathName, points, fill, stroke, strokeWidth)
+        super(Feature, self).__init__(pathName, points, fill, stroke, strokeWidth)
         self.height = "featureHeight"
         self.width = "featureThickness(%.3f)" % self.strokeWidth
         self.fillHeight = "featureHeight"
@@ -137,7 +137,7 @@ class Feature(Line):
 
 class Connector(Line):
     def __init__(self, pathName, points, fill):
-        super().__init__(pathName, points, fill, False, None) # no stroke for connectors, thus no use of self.height and self.width
+        super(Connector, self).__init__(pathName, points, fill, False, None) # no stroke for connectors, thus no use of self.height and self.width
         self.width = None
         self.fillHeight = "connectorThickness"
         self.hasOuterFlare = False
