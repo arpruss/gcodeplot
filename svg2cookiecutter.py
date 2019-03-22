@@ -19,7 +19,8 @@ minFeatureThickness = 1;
 maxFeatureThickness = 3;
 
 connectorThickness = 3;
-cuttingEdgeThickness = 1.5;
+cuttingTaperHeight = 2.5;
+cuttingEdgeThickness = 1.25;
 demouldingPlateHeight = 0; // default off
 demouldingPlateSlack = 1.5;
 
@@ -45,10 +46,19 @@ module ribbon(points, thickness=1) {
 
 
 module wall(points,height,thickness) {
+    module profile() {
+        if (height>=cuttingTaperHeight && cuttingTaperHeight>0 && cuttingEdgeThickness<thickness) {
+            cylinder(h=height-cuttingTaperHeight+0.001,d=thickness,$fn=8);
+            translate([0,0,height-cuttingTaperHeight]) cylinder(h=cuttingTaperHeight,d1=thickness,d2=cuttingEdgeThickness);
+        }
+        else {
+            cylinder(h=height,$fn=8);
+        }
+    }
     for (i=[1:len(points)-1]) {
         hull() {
-            translate(points[i-1]) cylinder(h=height,d1=thickness,d2=cuttingEdgeThickness,$fn=8);
-            translate(points[i])   cylinder(h=height,d1=thickness,d2=cuttingEdgeThickness,$fn=8);
+            translate(points[i-1]) profile();
+            translate(points[i])   profile();
         }
     }
 }
