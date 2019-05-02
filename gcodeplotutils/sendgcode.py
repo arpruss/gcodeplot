@@ -42,9 +42,15 @@ def sendHPGL(port, commands):
     s.write(commands)
     s.close()
 
-def sendGcode(port, commands, speed=115200, quiet = False, gcodePause="@pause", plotter=None, variables={}, formulas={}):
+def sendGcode(port, commands, speed=115200, xonxoff=True, quiet = False, gcodePause="@pause", plotter=None, variables={}, formulas={}):
     class State(object):
         pass
+        
+    commandsSplit = []
+    for cmd in commands:
+        commandsSplit += cmd.split("\n")
+        
+    commands = commandsSplit
         
     state = State()
     state.cmd = None
@@ -58,7 +64,7 @@ def sendGcode(port, commands, speed=115200, quiet = False, gcodePause="@pause", 
     if port.startswith('file:'):
         s = FakeSerial(port[5:])
     else:
-        s = Serial(port, 115200)
+        s = Serial(port, speed, xonxoff=xonxoff)
     s.flushInput()
     
     class State(object):
