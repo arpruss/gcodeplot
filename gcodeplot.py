@@ -127,21 +127,21 @@ class Scale(object):
             if delta == 0:
                 s[i] = 1.
             else:
-                s[i] = (self.xyMax[i]-self.xyMin[i]) / delta
+                s[i] = (plotter.xyMax[i]-plotter.xyMin[i]) / delta
         self.scale = [min(s),min(s)]
-        self.offset = list(self.xyMin[i] - xyMin[i]*self.scale[i] for i in range(2))
+        self.offset = list(plotter.xyMin[i] - xyMin[i]*self.scale[i] for i in range(2))
 
     def align(self, plotter, xyMin, xyMax, align):
         o = [0,0]
         for i in range(2):
             if align[i] == ALIGN_LEFT:
-                o[i] = self.xyMin[i] - self.scale[i]*xyMin[i]
+                o[i] = plotter.xyMin[i] - self.scale[i]*xyMin[i]
             elif align[i] == ALIGN_RIGHT:
-                o[i] = self.xyMax[i] - self.scale[i]*xyMax[i]
+                o[i] = plotter.xyMax[i] - self.scale[i]*xyMax[i]
             elif align[i] == ALIGN_NONE:
                 o[i] = self.offset[i] # self.xyMin[i]
             elif align[i] == ALIGN_CENTER:
-                o[i] = 0.5 * (self.xyMin[i] - self.scale[i]*xyMin[i] + self.xyMax[i] - self.scale[i]*xyMax[i])
+                o[i] = 0.5 * (plotter.xyMin[i] - self.scale[i]*xyMin[i] + plotter.xyMax[i] - self.scale[i]*xyMax[i])
             else:
                 raise ValueError()
         self.offset = o
