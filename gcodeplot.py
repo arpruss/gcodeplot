@@ -66,7 +66,7 @@ class Plotter(object):
     @property
     def penUpZ(self):
         return self.workZ + self.liftDeltaZ
-        
+
     def updateVariables(self):
         self.variables = {'lift':self.liftDeltaZ, 'work':self.workZ, 'safe':self.safeDeltaZ, 'left':self.xyMin[0],
             'bottom':self.xyMin[1], 'zspeed':self.zSpeed, 'movespeed':self.moveSpeed}
@@ -78,14 +78,14 @@ def processCode(code):
 
     data = []
     pattern = r'\{\{([^}]+)\}\}'
-    
+
     data = tuple( evaluate(expr, plotter.variables, plotter.formulas) for expr in re.findall(pattern, code))
 
-        
+
     formatString = re.sub(pattern, '', code.replace('|', '\n'))
-    
+
     return [formatString % data]
-        
+
 def gcodeHeader(plotter):
     return processCode(plotter.initCode)
 
@@ -369,8 +369,8 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
         gcode.append('<?xml version="1.0" standalone="yes"?>')
         gcode.append('<svg width="%.4fmm" height="%.4fmm" viewBox="%.4f %.4f %.4f %.4f" xmlns="http://www.w3.org/2000/svg" version="1.1">' % (
             plotter.xyMax[0]-plotter.xyMin[0], plotter.xyMax[1]-plotter.xyMin[0], plotter.xyMin[0], plotter.xyMin[1], plotter.xyMax[0], plotter.xyMax[1]))
-            
-            
+
+
     def park():
         if not simulation:
             lift = plotter.safeLiftCommand or plotter.liftCommand
@@ -453,7 +453,7 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
             state.curXY = p
 
     for pen in sorted(data):
-        if pen is not 1:
+        if pen != 1:
             state.curZ = None
             state.curXY = None
 
@@ -771,7 +771,7 @@ if __name__ == '__main__':
     comment = ";"
     sendAndSave = False
     directionAngle = None
-    
+
     def maybeNone(a):
         return None if a=='none' else a
 
@@ -1054,7 +1054,7 @@ if __name__ == '__main__':
     elif toolMode == 'draw':
         toolOffset = 0.
         sortPaths = False
-        
+
     plotter.updateVariables()
 
     if len(args) == 0:
