@@ -3,7 +3,7 @@
   <_name>OpenSCAD Cookie Cutter Export</_name>
   <id>mobi.omegacentauri.cookiecutter</id>
   <dependency type="extension">org.inkscape.output.svg.inkscape</dependency>
-  <dependency type="executable" location="extensions">svg2cookiecutter.py</dependency>
+  <dependency type="executable" location="inx">svg2cookiecutter.py</dependency>
   <output>
     <extension>.scad</extension>
     <mimetype>text/plain</mimetype>
@@ -12,6 +12,6 @@
     <dataloss>true</dataloss>
   </output>
   <script>
-      <command reldir="extensions" interpreter="python">svg2cookiecutter.py</command>
+      <command location="inx" interpreter="python">svg2cookiecutter.py</command>
   </script>
 </inkscape-extension>

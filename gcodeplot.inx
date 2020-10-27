@@ -3,7 +3,7 @@
   <_name>GcodePlot</_name>
   <id>mobi.omegacentauri.gcodeplot</id>
   <dependency type="extension">org.inkscape.output.svg.inkscape</dependency>
-  <dependency type="executable" location="extensions">gcodeplot.py</dependency>
+  <dependency type="executable" location="inx">gcodeplot.py</dependency>
   <param name="tab" type="notebook">
     <page name="general" _gui-text="General Settings ">
       <param name="tool-mode" type="enum" _gui-text="Tool mode:" _gui-description="In draw mode, tool offset, overcut and inside-out sorting settings are ignored. In cut mode, shading, optimization and direction are always disabled and inside-out sorting is always enabled. In custom mode, one can mix and match these.">
@@ -95,6 +95,6 @@
     <dataloss>true</dataloss>
   </output>
   <script>
-      <command reldir="extensions" interpreter="python">gcodeplot.py</command>
+      <command location="inx" interpreter="python">gcodeplot.py</command>
   </script>
 </inkscape-extension>
