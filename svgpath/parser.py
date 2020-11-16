@@ -592,7 +592,7 @@ def getPathsFromSVG(svg):
                     if tag.strip().lower().endswith("}href"):
                         link = tree.attrib[tag]
                         break
-                if link is None or link[0] is not '#':
+                if link is None or link[0] != '#':
                     raise KeyError
                 source = savedElements[link[1:]]
                 x = 0

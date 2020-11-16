@@ -453,7 +453,7 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
             state.curXY = p
 
     for pen in sorted(data):
-        if pen is not 1:
+        if pen != 1:
             state.curZ = None
             state.curXY = None
 
