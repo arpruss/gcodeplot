@@ -596,7 +596,7 @@ def parseSVG(svgTree, tolerance=0.05, shader=None, strokeAll=False, pens=None, e
             del data[strokePen]
 
         if shader is not None and shader.isActive() and path.svgState.fill is not None and (extractColor is None or
-                isSameColor(path.svgStatefill, extractColor)):
+                isSameColor(path.svgState.fill, extractColor)):
             pen = getPen(pens, path.svgState.fill)
 
             if pen not in data:
