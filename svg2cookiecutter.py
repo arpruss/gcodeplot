@@ -29,6 +29,8 @@ cuttingEdgeThickness = 1.25;
 demouldingPlateHeight = 0;
 demouldingPlateSlack = 1.5;
 
+flatInside = true;
+
 // sizing
 function clamp(t,minimum,maximum) = min(maximum,max(t,minimum));
 function featureThickness(t)      = clamp(t,minFeatureThickness,maxFeatureThickness);
@@ -61,11 +63,21 @@ module wall(points,height,thickness) {
             cylinder(h=height,d=thickness,$fn=8);
         }
     }
-    for (i=[1:len(points)-1]) {
-        hull() {
-            translate(points[i-1]) profile();
-            translate(points[i])   profile();
+    module hullProfile() {
+        for (i=[1:len(points)-1]) {
+            hull() {
+                translate(points[i-1]) profile();
+                translate(points[i])   profile();
+            }
+        }        
+    }
+    if (flatInside) {
+        difference() {
+            hullProfile();
+            translate([0,0,-0.01]) linear_extrude(height=height + 0.02) polygon(points, h=height);
         }
+    } else {
+        hullProfile();
     }
 }
 
