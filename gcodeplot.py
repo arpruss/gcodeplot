@@ -328,7 +328,7 @@ def penColor(pens, pen):
     else:
         return (0.,0.,0.)
 
-def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align = None, tolerance=0, gcodePause="@pause", pauseAtStart = False, simulation = False):
+def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align = None, tolerance=0, gcodePause="@pause", pauseAtStart = False, simulation = False, relCode = False, incHoming = True):
     if len(data) == 0:
         return None
 
@@ -377,9 +377,15 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
             if lift:
                 gcode.extend(processCode(lift))
             else:
+                if relCode:
+                    gcode.append('G90 ;Absolute mode for Z movement')
                 gcode.append('G00 F%.1f Z%.3f; pen park !!Zpark' % (plotter.zSpeed*60., plotter.safeUpZ))
+                if relCode:
+                    gcode.append('G91 ;Relative mode for XY movement')
 
     park()
+    if relCode:
+        gcode.append('G91 ;Relative mode for XY movement')
     if not simulation:
         gcode.append('G00 F%.1f Y%.3f; !!Ybottom' % (plotter.moveSpeed*60.,   plotter.xyMin[1]))
         gcode.append('G00 F%.1f X%.3f; !!Xleft' % (plotter.moveSpeed*60.,   plotter.xyMin[0]))
@@ -413,7 +419,11 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
                 if plotter.downCommand:
                     gcode.extend(processCode(plotter.downCommand))
                 else:
+                    if relCode:
+                        gcode.append('G90 ;Absolute mode for Z movement')
                     gcode.append('G00 F%.1f Z%.3f; pen down !!Zwork' % (plotter.zSpeed*60., plotter.workZ))
+                    if relCode:
+                        gcode.append('G91 ;Relavite mode for XY-movement')
             state.time += abs(state.curZ-plotter.workZ) / plotter.zSpeed
             state.curZ = plotter.workZ
 
@@ -430,8 +440,13 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
             else:
                 penUp(force=force)
             if not simulation:
+                x = p[0]
+                y = p[1]
+                if relCode:
+                    x -= state.curXY[0]
+                    y -= state.curXY[1]
                 gcode.append('G0%d F%.1f X%.3f Y%.3f; %s !!Xleft+%.3f Ybottom+%.3f' % (
-                    1 if down else 0, speed*60., p[0], p[1], "draw" if down else "move",
+                    1 if down else 0, speed*60., x, y, "draw" if down else "move",
                     p[0]-plotter.xyMin[0], p[1]-plotter.xyMin[1]))
             else:
                 start = state.curXY if state.curXY is not None else plotter.xyMin
@@ -771,7 +786,9 @@ if __name__ == '__main__':
     comment = ";"
     sendAndSave = False
     directionAngle = None
-    
+    relCode = False
+    incHoming = True
+
     def maybeNone(a):
         return None if a=='none' else a
 
@@ -785,7 +802,7 @@ if __name__ == '__main__':
                         'pause-at-start', 'no-pause-at-start', 'min-x=', 'max-x=', 'min-y=', 'max-y=',
                         'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all', 'gcode-pause', 'dump-options', 'tab=', 'extract-color=', 'sort', 'no-sort', 'simulation', 'no-simulation', 'tool-offset=', 'overcut=',
                         'boolean-shading-crosshatch=', 'boolean-sort=', 'tool-mode=', 'send-and-save=', 'direction=', 'lift-command=', 'down-command=',
-                        'init-code=', 'comment-delimiters=', 'end-code=' ], )
+                        'init-code=', 'comment-delimiters=', 'end-code=', 'rel-code=' ], )
 
         if len(args) + len(opts) == 0:
             raise getopt.GetoptError("invalid commandline")
@@ -965,8 +982,12 @@ if __name__ == '__main__':
                 plotter.endCode = maybeNone(arg)
             elif opt == '--comment-delimiters':
                 plotter.comment = maybeNone(arg)
+            elif opt == "--rel-code":
+                relCode = arg == "true"
+            elif opt == "--inc-homing":
+                incHoming = arg == "true"
             else:
-                raise ValueError("Unrecognized argument "+opt)
+                raise ValueError("Unrecognized argument "+opt + " " + arg)
             i += 1
 
     except getopt.GetoptError as e:
@@ -1126,7 +1147,7 @@ if __name__ == '__main__':
         g = emitHPGL(penData, pens=pens)
     else:
         g = emitGcode(penData, align=align, scalingMode=scalingMode, tolerance=tolerance,
-                plotter=plotter, gcodePause=gcodePause, pens=pens, pauseAtStart=pauseAtStart, simulation=svgSimulation)
+                plotter=plotter, gcodePause=gcodePause, pens=pens, pauseAtStart=pauseAtStart, simulation=svgSimulation, relCode = relCode, incHoming = incHoming)
 
     if g:
         dump = True
