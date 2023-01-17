@@ -22,6 +22,7 @@
       <param name="pen-up-speed" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Movement speed (mm/s):" _gui-description="Speed  moving with pen up (Default: 40)">40</param>
       <param name="pen-down-speed" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Draw speed (mm/s):" _gui-description="Speed moving with pen down (Default: 35)">35</param>
       <param name="z-speed" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Z-speed (mm/s):" _gui-description="Speed moving pen up/down (Default: 5)">5</param>
+      <param name="rel-code" type="bool" _gui-text="Generate relative GCode" _gui-description="Use relavite moves">false</param>
       <param name="send-and-save" type="string" _gui-text="Serial port to send gcode to (blank not to send)" _gui-description="If you enter the name of your serial port here (e.g., COM4), then you can directly send the file to your device."></param>
       <param name="send-speed" type="enum" _gui-text="Serial baud rate:" _gui-description="Baud rate of your serial device (Default: 115200)">
         <item value="115200">115200</item>
