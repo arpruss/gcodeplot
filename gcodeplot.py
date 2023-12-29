@@ -836,7 +836,7 @@ def parse_arguments(argparser:argparse.ArgumentParser):
     argparser.add_argument('--tool-mode', metavar='MODE', choices=['custom','cut','draw'], default='custom', help=argparse.SUPPRESS)
     
     #Inkscape specific boolean parameters
-    argparser.add_argument('--boolean-extract-color', metavar='TRUE/FALSE', dest='extract_color',  help=argparse.SUPPRESS)
+    argparser.add_argument('--boolean-extract-color', metavar='TRUE/FALSE', type=lambda val: True if val.lower() == 'true' else False, help=argparse.SUPPRESS)
     argparser.add_argument('--boolean-shading-crosshatch', metavar='TRUE/FALSE', dest='shading_crosshatch',  help=argparse.SUPPRESS)
     argparser.add_argument('--boolean-sort', metavar='TRUE/FALSE', dest='sort',  help=argparse.SUPPRESS)
     
@@ -856,7 +856,7 @@ def generate_pen_data(svgTree, data, args, scalingMode, shader:Shader):
     penData = {}
     
     if svgTree is not None:
-        penData = parseSVG(svgTree, tolerance=args.tolerance, shader=shader, strokeAll=args.stroke_all, pens=args.pens, extractColor=args.extract_color if args.extract_color is not False else None)
+        penData = parseSVG(svgTree, tolerance=args.tolerance, shader=shader, strokeAll=args.stroke_all, pens=args.pens, extractColor=args.extract_color if args.boolean_extract_color else None)
     else:
         penData = parseHPGL(data, dpi=args.input_dpi)
         
