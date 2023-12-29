@@ -1,20 +1,21 @@
 #!/usr/bin/python
 from __future__ import print_function
+from gcodeplotutils.evaluate import evaluate
+from gcodeplotutils.processoffset import OffsetProcessor
 from pathlib import Path
-import re
-import sys
-import math
-import xml.etree.ElementTree as ET
-import gcodeplotutils.anneal as anneal
-import svgpath.parser as parser
-import cmath
-import requests
-import io
 from random import sample
 from svgpath.shader import Shader
-from gcodeplotutils.processoffset import OffsetProcessor
-from gcodeplotutils.evaluate import evaluate
 import argparse
+import cmath
+import gcodeplotutils.anneal as anneal
+import gcodeplotutils.sendgcode as sendgcode
+import io
+import math
+import re
+import requests
+import svgpath.parser as parser
+import sys
+import xml.etree.ElementTree as ET
 
 SCALE_NONE = 0
 SCALE_DOWN_ONLY = 1
@@ -851,8 +852,8 @@ def parse_svg_file(data):
 
 
 
-def generate_pen_data(svgTree, data, args, sortPaths, optimizationTime, shader:Shader):
-    penData = None
+def generate_pen_data(svgTree, data, args, sortPaths, optimizationTime, scalingMode, shader:Shader):
+    penData = {}
     
     if svgTree is not None:
         penData = parseSVG(svgTree, tolerance=args.tolerance, shader=shader, strokeAll=args.stroke_all, pens=args.pens, extractColor=args.extract_color if args.extract_color is not False else None)
@@ -873,7 +874,7 @@ def generate_pen_data(svgTree, data, args, sortPaths, optimizationTime, shader:S
         penData = removePenBob(penData)
     
     if (args.tool_offset > 0. or args.overcut > 0.) and penData:
-        if args.scalingMode != SCALE_NONE:
+        if scalingMode != SCALE_NONE:
             sys.stderr.write("Scaling with tool-offset > 0 will produce unpredictable results.\n")
         op = OffsetProcessor(toolOffset=args.tool_offset, overcut=args.overcut, tolerance=args.tolerance)
         penData = {pen: op.processPath(paths) for pen, paths in penData.items()}
@@ -887,7 +888,7 @@ def generate_pen_data(svgTree, data, args, sortPaths, optimizationTime, shader:S
         for pen in sorted(penData):
             sys.stderr.write(describePen(args.pens, pen)+"\n")
             
-                
+    return penData          
             
 if __name__ == '__main__':
         
@@ -932,25 +933,25 @@ if __name__ == '__main__':
 
     plotter.updateVariables()
     
+    # If no file is provided on the input, assume the intent is to run the init g-code over serial. 
     if len(positional) == 0:
         if not args.pause_at_start:
             argparser.print_help()
         if sendPort is None: 
             sys.stderr.write("Need to specify --send=port to be able to pause without any file.")
             sys.exit(1)
-        import gcodeplotutils.sendgcode as sendgcode
-        
+               
         sendgcode.sendGcode(port=sendPort, speed=args.send_speed, commands=gcodeHeader(plotter) + [args.gcode_pause], gcodePause=args.gcode_pause, variables=plotter.variables, formulas=plotter.formulas)
         sys.exit(0)
-        
+    
+    # Otherwise, open the input file 
     with open(positional[0], 'r') as f:
         data = f.read()
     
     svgTree = parse_svg_file(data)
-
     shader.setDrawingDirectionAngle(args.direction)
     
-    penData = generate_pen_data(svgTree, data, args, sortPaths, optimizationTime, shader)
+    penData = generate_pen_data(svgTree, data, args, sortPaths, optimizationTime, scalingMode, shader)
 
             
     if args.hpgl_out and not args.simulation:
@@ -964,12 +965,9 @@ if __name__ == '__main__':
         sys.stderr.write("No points.")
         sys.exit(1)
 
-
     dump = True
     
     if sendPort is not None and not args.simulation:
-        import gcodeplotutils.sendgcode as sendgcode
-        
         dump = sendAndSave
         
         if args.hpgl_out: 
@@ -979,7 +977,6 @@ if __name__ == '__main__':
     
     if not dump:
         sys.exit(0)
-     
 
     if args.hpgl_out:
         sys.stdout.write(g)
@@ -987,8 +984,7 @@ if __name__ == '__main__':
     
     filtered = '\n'.join(fixComments(plotter, g, comment=plotter.comment)) + '\n' 
     if args.moonraker != "" and args.moonraker is not None:         
-        moonraker = args.moonraker.strip("/") + "/server/files/upload"          
-            
+        moonraker = args.moonraker.strip("/") + "/server/files/upload"                 
         virtual_file = io.BytesIO(filtered.encode('utf-8'))
         files = {'file': (args.moonraker_filename, virtual_file), 'print': args.moonraker_autoprint}
         response = requests.post(moonraker, files=files)
