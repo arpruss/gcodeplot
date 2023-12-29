@@ -839,19 +839,13 @@ def parse_arguments(argparser:argparse.ArgumentParser):
     argparser.add_argument('--boolean-shading-crosshatch', metavar='TRUE/FALSE', dest='shading_crosshatch',  help=argparse.SUPPRESS)
     argparser.add_argument('--boolean-sort', metavar='TRUE/FALSE', dest='sort',  help=argparse.SUPPRESS)
     
-    
-    
-    # First pass parsing to set values that will be used for the rest of the calculations
-    args,_ = argparser.parse_known_args()
-    
-    argparser.add_argument('--align', help=argparse.SUPPRESS, default=[parse_alignment(args.align_x, enumMode=True), parse_alignment(args.align_y, enumMode=True)])
-    
     return argparser.parse_known_args()
 
 
 def parse_svg_file(data):  
     try:
-        return (elem := ET.fromstring(data)) if 'svg' in elem.tag else None 
+        svgTree = ET.fromstring(data)
+        return svgTree if 'svg' in svgTree.tag else None 
     except:
         return None
 
@@ -914,18 +908,7 @@ if __name__ == '__main__':
     with open(rem[0], 'r') as f: #TODO: Change this back to 'r' instead of binary if Inkscape works
         data = f.read()
     
-    svgTree = None
-
-    try:
-        svgTree = ET.fromstring(data)
-        if not 'svg' in svgTree.tag:
-            svgTree = None
-    except:
-        svgTree = None
-
-    if svgTree is None and 'PD' not in data and 'PU' not in data:
-        sys.stderr.write("Unrecognized file.\n")
-        exit(1)
+    svgTree = parse_svg_file(data)
 
     shader.setDrawingDirectionAngle(args.direction)
     
@@ -969,8 +952,8 @@ if __name__ == '__main__':
     if args.hpgl_out and not args.simulation:
         g = emitHPGL(penData, pens=args.pens)
     else:
-
-        g = emitGcode(penData, align=args.align, scalingMode=scalingMode, tolerance=args.tolerance,
+        align = [parse_alignment(args.align_x, enumMode=True), parse_alignment(args.align_y, enumMode=True)]
+        g = emitGcode(penData, align=align, scalingMode=scalingMode, tolerance=args.tolerance,
                 plotter=plotter, gcodePause=args.gcode_pause, pens=args.pens, pauseAtStart=args.pause_at_start, simulation=args.simulation, quiet=args.quiet)
 
     if not g:
