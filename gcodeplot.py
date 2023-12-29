@@ -1,8 +1,8 @@
 #!/usr/bin/python
 from __future__ import print_function
+from pathlib import Path
 import re
 import sys
-import getopt
 import math
 import xml.etree.ElementTree as ET
 import gcodeplotutils.anneal as anneal
@@ -14,11 +14,12 @@ from random import sample
 from svgpath.shader import Shader
 from gcodeplotutils.processoffset import OffsetProcessor
 from gcodeplotutils.evaluate import evaluate
+import argparse
 
 SCALE_NONE = 0
 SCALE_DOWN_ONLY = 1
 SCALE_FIT = 2
-ALIGN_NONE = 0
+ALIGN_SCALE_NONE = 0
 ALIGN_BOTTOM = 1
 ALIGN_TOP = 2
 ALIGN_LEFT = ALIGN_BOTTOM
@@ -26,9 +27,9 @@ ALIGN_RIGHT = ALIGN_TOP
 ALIGN_CENTER = 3
 
 class Plotter(object):
-    def __init__(self, xyMin=(7,8), xyMax=(204,178),
-            drawSpeed=35, moveSpeed=40, zSpeed=5, workZ = 14.5, liftDeltaZ = 2.5, safeDeltaZ = 20,
-            liftCommand=None, safeLiftCommand=None, downCommand=None, comment=";",
+    def __init__(self, xyMin:tuple=(7,8), xyMax:tuple=(204,178),
+            drawSpeed:int=35, moveSpeed:int=40, zSpeed:int=5, workZ:float = 14.5, liftDeltaZ:float= 2.5, safeDeltaZ:float = 20,
+            liftCommand:str=None, safeLiftCommand:str=None, downCommand:str=None, comment:str=";",
             initCode = "G00 S1; endstops|"
                        "G00 E0; no extrusion|"
                        "G01 S1; endstops|"
@@ -60,6 +61,10 @@ class Plotter(object):
             if point[i] < self.xyMin[i]-.001 or point[i] > self.xyMax[i]+.001:
                 return False
         return True
+    
+    def setCoordinates(self,Xmin, Ymin, Xmax, Ymax):
+        self.xyMin = (Xmin, Ymin)
+        self.xyMax = (Xmax, Ymax)
 
     @property
     def safeUpZ(self):
@@ -109,6 +114,9 @@ class Pen(object):
         self.offset = tuple(map(float, re.sub(r'[()]',r'',data[1]).split(',')))
         self.color = parser.rgbFromColor(data[2])
         self.name = data[3]
+        
+    def __repr__(self):
+        return f"Pen(pen={self.pen}, offset={self.offset}, color={self.color}, name={self.name})"
 
 class Scale(object):
     def __init__(self, scale=(1.,1.), offset=(0.,0.)):
@@ -140,7 +148,7 @@ class Scale(object):
                 o[i] = plotter.xyMin[i] - self.scale[i]*xyMin[i]
             elif align[i] == ALIGN_RIGHT:
                 o[i] = plotter.xyMax[i] - self.scale[i]*xyMax[i]
-            elif align[i] == ALIGN_NONE:
+            elif align[i] == ALIGN_SCALE_NONE:
                 o[i] = self.offset[i] # self.xyMin[i]
             elif align[i] == ALIGN_CENTER:
                 o[i] = 0.5 * (plotter.xyMin[i] - self.scale[i]*xyMin[i] + plotter.xyMax[i] - self.scale[i]*xyMax[i])
@@ -330,7 +338,7 @@ def penColor(pens, pen):
     else:
         return (0.,0.,0.)
 
-def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align = None, tolerance=0, gcodePause="@pause", pauseAtStart = False, simulation = False):
+def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align = None, tolerance=0, gcodePause="@pause", pauseAtStart = False, simulation = False, quiet = False):
     if len(data) == 0:
         return None
 
@@ -693,397 +701,219 @@ def fixComments(plotter, data, comment = ";"):
     return out
 
 
-if __name__ == '__main__':
 
-    def help(error=False):
-        if error:
-            output = sys.stderr
+
+class PrintDefaultsAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        printed = set()
+        formatted_strings = [
+            self.format_argument(action, namespace)
+            for action in parser._actions 
+            if not isinstance(action, argparse._HelpAction) 
+            and action.help != argparse.SUPPRESS 
+            and (formatted := f'{action.dest}: {action.default}') not in printed and not printed.add(formatted)
+        ]
+        print('\n'.join(formatted_strings))
+        # parser.exit()
+
+    def format_argument(self, action, namespace):
+
+        if action.dest in ('scale', 'align_x', 'align_y'):
+            value = parse_alignment(getattr(namespace, action.dest, action.default), reverse=True)    
+        elif action.dest == 'extract_color' and (value := getattr(namespace, action.dest, action.default) ) == None:
+            value = 'all'
         else:
-            output = sys.stdout
-        output.write("gcodeplot.py [options] [inputfile [> output.gcode]\n")
-        output.write("""
-    --dump-options: show current settings instead of doing anything
- -h|--help: this
- -r|--allow-repeats*: do not deduplicate paths
- -f|--scale=mode: scaling option: none(n), fit(f), down-only(d) [default none; other options don't work with tool-offset]
- -D|--input-dpi=xdpi[,ydpi]: hpgl dpi
- -t|--tolerance=x: ignore (some) deviations of x millimeters or less [default 0.05]
- -s|--send=port*: send gcode to serial port instead of stdout
- -S|--send-speed=baud: set baud rate for sending
- -x|--align-x=mode: horizontal alignment: none(n), left(l), right(r) or center(c)
- -y|--align-y=mode: vertical alignment: none(n), bottom(b), top(t) or center(c)
- -a|--area=x1,y1,x2,y2: gcode print area in millimeters
- -Z|--lift-delta-z=z: amount to lift for pen-up (millimeters)
- -z|--work-z=z: z-position for drawing (millimeters)
- -F|--pen-up-speed=z: speed for moving with pen up (millimeters/second)
- -f|--pen-down-speed=z: speed for moving with pen down (millimeters/second)
- -u|--z-speed=s: speed for up/down movement (millimeters/second)
- -H|--hpgl-out*: output is HPGL, not gcode; most options ignored [default: off]
- -T|--shading-threshold=n: darkest grayscale to leave unshaded (decimal, 0. to 1.; set to 0 to turn off SVG shading) [default 1.0]
- -m|--shading-lightest=x: shading spacing for lightest colors (millimeters) [default 3.0]
- -M|--shading-darkest=x: shading spacing for darkest color (millimeters) [default 0.5]
- -A|--shading-angle=x: shading angle (degrees) [default 45]
- -X|--shading-crosshatch*: cross hatch shading
- -L|--stroke-all*: stroke even regions specified by SVG to have no stroke
- -O|--shading-avoid-outline*: avoid going over outline twice when shading
- -o|--optimization-time=t: max time to spend optimizing (seconds; set to 0 to turn off optimization) [default 60]
- -e|--direction=angle: for slanted pens: prefer to draw in given direction (degrees; 0=positive x, 90=positive y, none=no preferred direction) [default none]
- -d|--sort*: sort paths from inside to outside for cutting [default off]
- -c|--config-file=filename: read arguments, one per line, from filename
- -w|--gcode-pause=cmd: gcode pause command [default: @pause]
- -P|--pens=penfile: read output pens from penfile
- -U|--pause-at-start*: pause at start (can be included without any input file to manually move stuff)
- -R|--extract-color=c: extract color (specified in SVG format , e.g., rgb(1,0,0) or #ff0000 or red)
-    --comment-delimiters=xy: one or two characters specifying comment delimiters, e.g., ";" or "()"
-    --tool-offset=x: cutting tool offset (millimeters) [default 0.0]
-    --overcut=x: overcut (millimeters) [default 0.0]
-    --lift-command=gcode: gcode lift command (separate lines with |)
-    --down-command=gcode: gcode down command (separate lines with |)
-    --init-code=gcode: gcode init commands (separate lines with |)
-
- The options with an asterisk are default off and can be turned off again by adding "no-" at the beginning to the long-form option, e.g., --no-stroke-all or --no-send.
-""")
+            value = getattr(namespace, action.dest, action.default)
+        return f'{action.dest + ":":<25}{value}'
 
 
-    tolerance = 0.05
-    doDedup = True
-    sendPort = None
-    sendSpeed = 115200
-    hpglLength = 279.4
-    scalingMode = SCALE_NONE
-    shader = Shader()
-    align = [ALIGN_NONE, ALIGN_NONE]
-    plotter = Plotter()
-    hpglOut = False
-    strokeAll = False
-    extractColor = None
-    gcodePause = "@pause"
-    optimizationTime = 30
-    dpi = (1016., 1016.)
-    pens = {1:Pen('1 (0.,0.) black default')}
-    doDump = False
-    penFilename = None
-    pauseAtStart = False
-    sortPaths = False
-    svgSimulation = False
-    toolOffset = 0.
-    overcut = 0.
-    toolMode = "custom"
-    booleanExtractColor = False
-    quiet = False
-    comment = ";"
-    sendAndSave = False
-    directionAngle = None
-    moonraker = ""
-    moonrakerFilename = ""
-    moonrakerAutoprint = "false"
+class PenAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        pens = {}
+        pen_file = Path(values)
+        if pen_file.is_file():
+            pens = {p.pen: p for line in open(pen_file) if (line_stripped := line.strip()) and (p := Pen(line_stripped))}
+        else:
+            parser.error(f'Invalid filename provided in {self.dest} \n')
+        setattr(namespace, self.dest, pens)
+
+
+
+def parse_alignment(arg, enumMode=False, reverse=False):
+    verbose_mapping = {'none': 'n', 'left': 'l', 'right': 'r', 'center': 'c', 'bottom': 'b', 'top': 't', 'down': 'd', 'fit': 'f'}
+    enum_mapping = {'n': ALIGN_SCALE_NONE, 'l': ALIGN_LEFT, 'r': ALIGN_RIGHT, 'c': ALIGN_CENTER, 'b': ALIGN_BOTTOM, 't': ALIGN_TOP, 'd': SCALE_DOWN_ONLY, 'f': SCALE_FIT}
+    if enumMode: return enum_mapping.get(arg, ALIGN_SCALE_NONE)  
+    if reverse: return next((key for key, value in verbose_mapping.items() if value == arg), None)
+    return verbose_mapping.get(arg.lower(), 'n') if len(arg) > 1 else arg
+
+def none_or_str(value):
+        return None if value=='none' else value
+
+
+def parse_arguments(argparser:argparse.ArgumentParser):
+
+    argparser.add_argument('--dump-options', help='show current settings instead of doing anything', action=PrintDefaultsAction, nargs=0)
     
-    def maybeNone(a):
-        return None if a=='none' else a
+    argparser.add_argument('-r', '--allow-repeats', dest='deduplicate', help='do not deduplicate paths',action='store_false')
+    argparser.add_argument('-f', '--scale', metavar='MODE', choices=['n', 'f', 'd'], default='n', type=parse_alignment, help='scaling option: none(n), fit(f), down-only(d) [default none; other options do not work with tool-offset]') 
+    argparser.add_argument('-D', '--input-dpi', metavar='x[,y]', default=(1016., 1016.), help='hpgl dpi', type=lambda s: tuple(map(float, s.split(','))) if ',' in s else (float(s), float(s))) # returns (x,x) if only one number provided, otherwise returns (x,y)
+    argparser.add_argument('-t', '--tolerance', metavar='x', default=0.05, type=float, help='ignore (some) deviations of x millimeters or less [default: %(default)s]')
+    
+    group_send = argparser.add_mutually_exclusive_group()
+    group_send.add_argument('-s', '--send', type=int, metavar='PORT', default=None, help='Send gcode to serial port instead of stdout')
+    group_send.add_argument('--no-send', dest='send', action='store_const', const=None, help='Set sendport to None')
 
+    argparser.add_argument('-S', '--send-speed', metavar='BAUD', default=115200, help='set baud rate for sending')
+    argparser.add_argument('--send-and-save', metavar='PORT', default=None, help=argparse.SUPPRESS)
+    
+    
+    argparser.add_argument('-x', '--align-x', metavar='MODE', choices=['n', 'l', 'r', 'c'], default='l', type=parse_alignment, help='horizontal alignment: none(n), left(l), right(r) or center(c)') 
+    argparser.add_argument('-y', '--align-y', metavar='MODE', choices=['n', 'b', 't', 'c'], default='t', type=parse_alignment, help='horizontal alignment: none(n), bottom(b), top(t) or center(c)') 
+
+
+    
+    # PLOTTER INIT
+    
+    argparser.add_argument('-a', '--area', metavar='x1,y1,x2,y2', default=[7, 8, 204, 178], type=lambda s: list(map(float, s.split(','))), help='gcode print area in millimeters')
+    argparser.add_argument('--min-x', type=float, default=None, help=argparse.SUPPRESS)
+    argparser.add_argument('--min-y', type=float, default=None, help=argparse.SUPPRESS)
+    argparser.add_argument('--max-x', type=float, default=None, help=argparse.SUPPRESS)
+    argparser.add_argument('--max-y', type=float, default=None, help=argparse.SUPPRESS)
+
+    argparser.add_argument('-Z', '--lift-delta-z', metavar='Z', default=2.5, type=float, help='amount to lift for pen-up (millimeters)')
+    argparser.add_argument('-z', '--work-z', metavar='Z', default=14.5, type=float, help='z-position for drawing (millimeters)')  
+    argparser.add_argument('-V', '--pen-up-speed', metavar='S', default=40, type=float, help='speed for moving with pen up (millimeters/second)')
+    argparser.add_argument('-v', '--pen-down-speed', metavar='S', default=35, type=float, help='speed for moving with pen down (millimeters/second)')
+    argparser.add_argument('-u', '--z-speed', metavar='S', default=5, type=float, help='speed for up/down movement (millimeters/second)')
+    argparser.add_argument('--safe-delta-z', metavar='Z', default=20.0, type=float, help='height to lift tool for safe parking (Default: 20)')
+    argparser.add_argument('--comment-delimiters', metavar='XY', type=none_or_str, default=';', help='one or two characters specifying comment delimiters, e.g., ";" or "()"')
+    argparser.add_argument('--lift-command', metavar='GCODE', type=none_or_str, default=None, help='gcode lift command (separate lines with |)')
+    argparser.add_argument('--down-command', metavar='GCODE', type=none_or_str, default=None, help='gcode down command (separate lines with |)')
+    argparser.add_argument('--init-code', metavar='GCODE', type=none_or_str, default="G00 S1; endstops|G00 E0; no extrusion|G01 S1; endstops|G01 E0; no extrusion|G21; millimeters|G91 G0 F%.1f{{zspeed*60}} Z%.3f{{safe}}; pen park !!Zsafe|G90; absolute|G28 X; home|G28 Y; home|G28 Z; home", help='gcode init commands (separate lines with |)')
+    argparser.add_argument('--end-code', metavar='GCODE', type=none_or_str, default=None, help='Gcode to run at end of task')
+    
+    
+    argparser.add_argument('-H', '--hpgl-out', action=argparse.BooleanOptionalAction, default=False, help='output is HPGL, not gcode; most options are ignored.')
+    
+    argparser.add_argument('-T', '--shading-threshold', metavar='N', default=1.0, type=float, help='darkest grayscale to leave unshaded (decimal, 0. to 1.; set to 0 to turn off SVG shading) [default 1.0]')
+    
+    
+    argparser.add_argument('-m', '--shading-lightest', metavar='X', default=3.0, type=float, help='shading spacing for lightest colors (millimeters) [default 3.0]')
+    argparser.add_argument('-M', '--shading-darkest', metavar='X', default=0.5, type=float, help='shading spacing for darkest color (millimeters) [default 0.5]')
+    argparser.add_argument('-A', '--shading-angle', metavar='X', default=45, type=float, help='shading angle (degrees) [default 45]')
+   
+    argparser.add_argument('-X', '--shading-crosshatch', action=argparse.BooleanOptionalAction, default=False, help='cross hatch shading')
+    
+    argparser.add_argument('-L', '--stroke-all', action=argparse.BooleanOptionalAction, default=False, help='stroke even regions specified by SVG to have no stroke')
+    argparser.add_argument('-O', '--shading-avoid-outline', action=argparse.BooleanOptionalAction, default=False, help='avoid going over outline twice when shading') #?Unused
+    
+    argparser.add_argument('-e', '--direction', metavar='ANGLE', default=None, type=float, help='for slanted pens: prefer to draw in given direction (degrees; 0=positive x, 90=positive y, -1=no preferred direction) [default none]')
+    
+    argparser.add_argument('-o', '--optimization-time', metavar='T', default=60, type=int, help='max time to spend optimizing (seconds; set to 0 to turn off optimization) [default 60]')
+    argparser.add_argument('-d', '--sort', action=argparse.BooleanOptionalAction, default=False, help='sort paths from inside to outside for cutting [default off]')
+    
+    
+     
+    # parser.add_argument('-c', '--config-file', metavar='$FILENAME', help='read arguments, one per line, from filename. Prepend the filename with "$" e.g. $"args.txt"')
+    argparser.add_argument('-w', '--gcode-pause', metavar='CMD', default='@pause', help='gcode pause command [default: @pause]')
+    argparser.add_argument('-P', '--pens', metavar='PENFILE', default={1:Pen('1 (0.,0.) black default')}, action=PenAction, help='read output pens from penfile')
+    
+    argparser.add_argument('-U', '--pause-at-start', action=argparse.BooleanOptionalAction, default=False, help='pause at start (can be included without any input file to manually move stuff)')
+    
+    argparser.add_argument('-R', '--extract-color', metavar='C', default=None, type=parser.rgbFromColor, help='extract color (specified in SVG format , e.g., rgb(1,0,0) or #ff0000 or red)')
+
+    argparser.add_argument('--tool-offset', metavar='X', default=0.0, type=float, help='cutting tool offset (millimeters) [default 0.0]')
+    argparser.add_argument('--overcut', metavar='X', default=0.0, type=float, help='overcut (millimeters) [default 0.0]')
+
+    
+    argparser.add_argument('--moonraker', metavar='URL', default=None, help='moonraker url')
+    argparser.add_argument('--moonraker-filename', metavar='FILENAME', default='toolpath.gcode', help='name of uploaded file')
+    argparser.add_argument('--moonraker-autoprint', metavar='TRUE/FALSE', default=False, help='whether to automatically begin the print job after upload')
+    
+    argparser.add_argument('--simulation', metavar='TRUE/FALSE', action=argparse.BooleanOptionalAction, default=False, help=argparse.SUPPRESS)
+    argparser.add_argument('--tab', dest='quiet', default=False, type=bool, help=argparse.SUPPRESS)
+    argparser.add_argument('--tool-mode', metavar='MODE', choices=['custom','cut','draw'], default='custom', help=argparse.SUPPRESS)
+    
+    #Inkscape specific boolean parameters
+    argparser.add_argument('--boolean-extract-color', metavar='TRUE/FALSE', dest='extract_color',  help=argparse.SUPPRESS)
+    argparser.add_argument('--boolean-shading-crosshatch', metavar='TRUE/FALSE', dest='shading_crosshatch',  help=argparse.SUPPRESS)
+    argparser.add_argument('--boolean-sort', metavar='TRUE/FALSE', dest='sort',  help=argparse.SUPPRESS)
+    
+    
+    
+    # First pass parsing to set values that will be used for the rest of the calculations
+    args,_ = argparser.parse_known_args()
+    
+    argparser.add_argument('--align', help=argparse.SUPPRESS, default=[parse_alignment(args.align_x, enumMode=True), parse_alignment(args.align_y, enumMode=True)])
+    
+    return argparser.parse_known_args()
+
+
+def parse_svg_file(data):  
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "e:UR:Uhdulw:P:o:Oc:LT:M:m:A:XHrf:na:D:t:s:S:x:y:z:Z:p:f:F:",
-                        ["help", "down", "up", "lower-left", "allow-repeats", "no-allow-repeats", "scale=", "config-file=",
-                        "area=", 'align-x=', 'align-y=', 'optimization-time=', "pens=",
-                        'input-dpi=', 'tolerance=', 'send=', 'send-speed=', 'work-z=', 'lift-delta-z=', 'safe-delta-z=',
-                        'pen-down-speed=', 'pen-up-speed=', 'z-speed=', 'hpgl-out', 'no-hpgl-out', 'shading-threshold=',
-                        'shading-angle=', 'shading-crosshatch', 'no-shading-crosshatch', 'shading-avoid-outline',
-                        'pause-at-start', 'no-pause-at-start', 'min-x=', 'max-x=', 'min-y=', 'max-y=',
-                        'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all', 'gcode-pause', 'dump-options', 'tab=', 'extract-color=', 'sort', 'no-sort', 'simulation', 'no-simulation', 'tool-offset=', 'overcut=',
-                        'boolean-shading-crosshatch=', 'boolean-sort=', 'tool-mode=', 'send-and-save=', 'moonraker=', 'moonraker-filename=', 'moonraker-autoprint=','direction=', 'lift-command=', 'down-command=',
-                        'init-code=', 'comment-delimiters=', 'end-code=' ], )
+        return (elem := ET.fromstring(data)) if 'svg' in elem.tag else None 
+    except:
+        return None
 
-        if len(args) + len(opts) == 0:
-            raise getopt.GetoptError("invalid commandline")
 
-        i = 0
-        while i < len(opts):
-            opt,arg = opts[i]
-            if opt in ('-r', '--allow-repeats'):
-                doDedup = False
-            elif opt == '--no-allow-repeats':
-                doDedup = True
-            elif opt in ('-w', '--gcode-pause'):
-                gcodePause = arg
-            elif opt in ('-p', '--pens'):
-                pens = {}
-                penFilename = arg
-                with open(arg) as f:
-                    for line in f:
-                        if line.strip():
-                            p = Pen(line)
-                            pens[p.pen] = p
-            elif opt in ('-f', '--scale'):
-                arg = arg.lower()
-                if arg.startswith('n'):
-                    scalingMode = SCALE_NONE
-                elif arg.startswith('d'):
-                    scalingMode = SCALE_DOWN_ONLY
-                elif arg.startswith('f'):
-                    scalingMode = SCALE_FIT
-            elif opt in ('-x', '--align-x'):
-                arg = arg.lower()
-                if arg.startswith('l'):
-                    align[0] = ALIGN_LEFT
-                elif arg.startswith('r'):
-                    align[0] = ALIGN_RIGHT
-                elif arg.startswith('c'):
-                    align[0] = ALIGN_CENTER
-                elif arg.startswith('n'):
-                    align[0] = ALIGN_NONE
-                else:
-                    raise ValueError()
-            elif opt in ('-y', '--align-y'):
-                arg = arg.lower()
-                if arg.startswith('b'):
-                    align[1] = ALIGN_LEFT
-                elif arg.startswith('t'):
-                    align[1] = ALIGN_RIGHT
-                elif arg.startswith('c'):
-                    align[1] = ALIGN_CENTER
-                elif arg.startswith('n'):
-                    align[1] = ALIGN_NONE
-                else:
-                    raise ValueError()
-            elif opt in ('-t', '--tolerance'):
-                tolerance = float(arg)
-            elif opt in ('-s', '--send'):
-                sendPort = None if len(arg.strip()) == 0 else arg
-            elif opt == '--send-and-save':
-                sendPort = None if len(arg.strip()) == 0 else arg
-                if sendPort is not None:
-                    sendAndSave = True
-            elif opt== '--moonraker':
-                moonraker = None if len(arg.strip()) == 0 else arg
-            elif opt== '--moonraker-filename':
-                moonrakerFilename = "Inkscape.gcode" if len(arg.strip()) == 0 else arg.strip(".gcode") + ".gcode"
-            elif opt== '--moonraker-autoprint':
-                moonrakerAutoprint = arg
-            elif opt == '--no-send':
-                sendPort = None
-            elif opt in ('-S', '--send-speed'):
-                sendSpeed = int(arg)
-            elif opt in ('-a', '--area'):
-                v = list(map(float, arg.split(',')))
-                plotter.xyMin = (v[0],v[1])
-                plotter.xyMax = (v[2],v[3])
-            elif opt == '--min-x':
-                plotter.xyMin = (float(arg),plotter.xyMin[1])
-            elif opt == '--min-y':
-                plotter.xyMin = (plotter.xyMin[0],float(arg))
-            elif opt == '--max-x':
-                plotter.xyMax = (float(arg),plotter.xyMax[1])
-            elif opt == '--max-y':
-                plotter.xyMax = (plotter.xyMax[0],float(arg))
-            elif opt in ('-D', '--input-dpi'):
-                v = list(map(float, arg.split(',')))
-                if len(v) > 1:
-                    dpi = v[0:2]
-                else:
-                    dpi = (v[0],v[0])
-            elif opt in ('-Z', '--lift-delta-z'):
-                plotter.liftDeltaZ = float(arg)
-            elif opt in ('-z', '--work-z'):
-                plotter.workZ = float(arg)
-            elif opt == '--tool-offset':
-                toolOffset = float(arg)
-            elif opt == '--overcut':
-                overcut = float(arg)
-            elif opt in ('-p', '--safe-delta-z'):
-                plotter.safeDeltaZ = float(arg)
-            elif opt in ('-F', '--pen-up-speed'):
-                plotter.moveSpeed = float(arg)
-            elif opt in ('-f', '--pen-down-speed'):
-                plotter.drawSpeed = float(arg)
-            elif opt in ('-u', '--z-speed'):
-                plotter.zSpeed = float(arg)
-            elif opt in ('-H', '--hpgl-out'):
-                hpglOut = True
-            elif opt == '--no-hpgl-out':
-                hpglOut = False
-            elif opt in ('-T', '--shading-threshold'):
-                shader.unshadedThreshold = float(arg)
-            elif opt in ('-m', '--shading-lightest'):
-                shader.lightestSpacing = float(arg)
-            elif opt in ('-M', '--shading-darkest'):
-                shader.darkestSpacing = float(arg)
-            elif opt in ('-A', '--shading-angle'):
-                shader.angle = float(arg)
-            elif opt == '--boolean-shading-crosshatch':
-                shader.crossHatch = arg.strip() != 'false'
-            elif opt == '--boolean-sort':
-                sort = arg.strip() != 'false'
-            elif opt in ('-X', '--shading-crosshatch'):
-                shader.crossHatch = True
-            elif opt == '--no-shading-crosshatch':
-                shader.crossHatch = False
-            elif opt in ('-O', '--shading-avoid-outline'):
-                avoidOutline = True
-            elif opt == '--no-shading-avoid-outline':
-                avoidOutline = False
-            elif opt == '--no-shading-crosshatch':
-                shader.crossHatch = False
-            elif opt == '--pause-at-start':
-                pauseAtStart = True
-            elif opt == '--no-pause-at-start':
-                pauseAtStart = False
-            elif opt in ('-L', '--stroke-all'):
-                strokeAll = True
-            elif opt == '--no-stroke-all':
-                strokeAll = False
-            elif opt in ('-c', '--config-file'):
-                configOpts = getConfigOpts(arg)
-                opts = opts[:i+1] + configOpts + opts[i+1:]
-            elif opt in ('-o', '--optimization-time'):
-                optimizationTime = float(arg)
-                if optimizationTime > 0:
-                    sort = False
-            elif opt in ('-h', '--help'):
-                help()
-                sys.exit(0)
-            elif opt == '--dump-options':
-                doDump = True
-            elif opt in ('-R', '--extract-color'):
-                arg = arg.lower()
-                if arg == 'all' or len(arg.strip())==0:
-                    extractColor = None
-                else:
-                    extractColor = parser.rgbFromColor(arg)
-            elif opt in ('-d', '--sort'):
-                sortPaths = True
-                optimizationTime = 0
-            elif opt == '--no-sort':
-                sortPaths = False
-            elif opt in ('U', '--simulation'):
-                svgSimulation = True
-            elif opt == '--no-simulation':
-                svgSimulation = False
-            elif opt == '--tab':
-                quiet = True # Inkscape
-            elif opt == "--tool-mode":
-                toolMode = arg
-            elif opt in ('e', '--direction'):
-                if len(arg.strip()) == 0 or arg == 'none':
-                    directionAngle = None
-                else:
-                    directionAngle = float(arg)
-            elif opt == '--lift-command':
-                plotter.liftCommand = maybeNone(arg)
-            elif opt == '--down-command':
-                plotter.downCommand = maybeNone(arg)
-            elif opt == '--init-code':
-                plotter.initCode = maybeNone(arg)
-            elif opt == '--end-code':
-                plotter.endCode = maybeNone(arg)
-            elif opt == '--comment-delimiters':
-                plotter.comment = maybeNone(arg)
-            else:
-                raise ValueError("Unrecognized argument "+opt)
-            i += 1
+if __name__ == '__main__':
+        
+    argparser = argparse.ArgumentParser(prog='Gcode Plot', description='test', fromfile_prefix_chars='$', epilog="You can load options from a text file by passing the filename prefixed with a '$' e.g. [python gcodeplot.py $'args.txt']", formatter_class=argparse.ArgumentDefaultsHelpFormatter)  
+    args, rem = parse_arguments(argparser)
 
-    except getopt.GetoptError as e:
-        sys.stderr.write(str(e)+"\n")
-        help(error=True)
-        sys.exit(2)
+    sendPort = args.send if args.send is not None else args.send_and_save
+    sendAndSave = args.send_and_save is not None
+    scalingMode = parse_alignment(args.scale, enumMode=True)
+    optimizationTime = 0 if args.sort else args.optimization_time
+    sortPaths = False if optimizationTime > 0 else args.sort
+    # directionAngle = args.direction  #TODO: go back to the argument and replace "-1" with "none" using type=lamba allocation 
+   
+    plotter = Plotter(xyMin=tuple((args.min_x if args.min_x is not None else args.area[0], args.min_y if args.min_y is not None else args.area[1])),
+                    xyMax=tuple((args.max_x if args.max_x is not None else args.area[2], args.max_y if args.max_y is not None else args.area[3])),
+                    drawSpeed=args.pen_down_speed,
+                    moveSpeed=args.pen_up_speed,
+                    zSpeed=args.z_speed,
+                    workZ=args.work_z,
+                    liftDeltaZ=args.lift_delta_z,
+                    safeDeltaZ=args.safe_delta_z,
+                    liftCommand=args.lift_command,
+                    safeLiftCommand=None,
+                    downCommand=args.down_command,
+                    initCode=args.init_code,
+                    endCode=args.end_code,
+                    comment=args.comment_delimiters)
+    
+    shader = Shader(unshadedThreshold=args.shading_threshold,
+                   lightestSpacing=args.shading_lightest,
+                   darkestSpacing=args.shading_darkest,
+                   angle=args.shading_angle,
+                   crossHatch=args.shading_crosshatch)
 
-    if doDump:
-        print('no-allow-repeats' if doDedup else 'allow-repeats')
-
-        print('gcode-pause=' + gcodePause)
-
-        if penFilename is not None:
-            print('pens=' + penFilename)
-
-        if scalingMode == SCALE_NONE:
-            print('scale=none')
-        elif scalingMode == SCALE_DOWN_ONLY:
-            print('scale=down')
-        else:
-            print('scale=fit')
-
-        if align[0] == ALIGN_LEFT:
-            print('align-x=left')
-        elif align[0] == ALIGN_CENTER:
-            print('align-x=center')
-        elif align[0] == ALIGN_RIGHT:
-            print('align-x=right')
-        else:
-            print('align-x=none')
-
-        if align[1] == ALIGN_BOTTOM:
-            print('align-y=bottom')
-        elif align[1] == ALIGN_CENTER:
-            print('align-y=center')
-        elif align[1] == ALIGN_TOP:
-            print('align-y=top')
-        else:
-            print('align-y=none')
-
-        print('tolerance=' + str(tolerance))
-
-        if sendPort is not None:
-            print('send=' + str(sendPort))
-        else:
-            print('no-send')
-
-        print('send-speed=' + str(sendSpeed))
-        print('area=%g,%g,%g,%g' % tuple(list(plotter.xyMin)+list(plotter.xyMax)))
-        print('input-dpi=%g,%g' % tuple(dpi))
-        print('safe-delta-z=%g' % (plotter.safeDeltaZ))
-        print('lift-delta-z=%g' % (plotter.liftDeltaZ))
-        print('work-z=%g' % (plotter.workZ))
-        print('pen-down-speed=%g' % (plotter.drawSpeed))
-        print('pen-up-speed=%g' % (plotter.moveSpeed))
-        print('z-speed=%g' % (plotter.zSpeed))
-        print('hpgl-out' if hpglOut else 'no-hpgl-out')
-        print('shading-threshold=%g' % (shader.unshadedThreshold))
-        print('shading-lightest=%g' % (shader.lightestSpacing))
-        print('shading-darkest=%g' % (shader.darkestSpacing))
-        print('shading-angle=%g' % (shader.angle))
-        print('shading-crosshatch' if shader.crossHatch else 'no-shading-crosshatch')
-        print('stroke-all' if strokeAll else 'no-stroke-all')
-        print('optimization-time=%g' % (optimizationTime))
-        print('sort' if sortPaths else 'no-sort')
-        print('pause-at-start' if pauseAtStart else 'no-pause-at-start')
-        print('extract-color=all' if extractColor is None else 'extract-color=rgb(%.3f,%.3f,%.3f)' % tuple(extractColor))
-        print('tool-offset=%.3f' % toolOffset)
-        print('overcut=%.3f' % overcut)
-        print('simulation' if svgSimulation else 'no-simulation')
-        print('direction=' + ('none' if directionAngle is None else '%.3f'%directionAngle))
-        print('lift-command=' + ('none' if plotter.liftCommand is None else plotter.liftCommand))
-        print('down-command=' + ('none' if plotter.downCommand is None else plotter.downCommand))
-        print('init-code=' + ('none' if plotter.initCode is None else plotter.initCode))
-        print('end-code=' + ('none' if plotter.endCode is None else plotter.endCode))
-        print('comment-delimiters=' + ('none' if plotter.comment is None else plotter.comment))
-
-        sys.exit(0)
-
-    if toolMode == 'cut':
+    if args.tool_mode == 'cut':
         shader.unshadedThreshold = 0
         optimizationTime = 0
         sortPaths = True
-        directionAngle = None
-    elif toolMode == 'draw':
-        toolOffset = 0.
+        args.direction = None
+    elif args.tool_mode == 'draw':
+        args.tool_offset = 0.
         sortPaths = False
-        
+
     plotter.updateVariables()
-
-    if len(args) == 0:
-        if not pauseAtStart:
-            help()
-
-        if sendPort is None:
+    
+    if len(rem) == 0:
+        if not args.pause_at_start:
+            argparser.print_help()
+        if sendPort is None: 
             sys.stderr.write("Need to specify --send=port to be able to pause without any file.")
             sys.exit(1)
         import gcodeplotutils.sendgcode as sendgcode
-
-        sendgcode.sendGcode(port=sendPort, speed=sendSpeed, commands=gcodeHeader(plotter) + [gcodePause], gcodePause=gcodePause, variables=plotter.variables, formulas=plotter.formulas)
+        
+        sendgcode.sendGcode(port=sendPort, speed=args.send_speed, commands=gcodeHeader(plotter) + [args.gcode_pause], gcodePause=args.gcode_pause, variables=plotter.variables, formulas=plotter.formulas)
         sys.exit(0)
-
-    with open(args[0], 'r') as f:
+        
+    with open(rem[0], 'r') as f: #TODO: Change this back to 'r' instead of binary if Inkscape works
         data = f.read()
-
+    
     svgTree = None
 
     try:
@@ -1097,86 +927,86 @@ if __name__ == '__main__':
         sys.stderr.write("Unrecognized file.\n")
         exit(1)
 
-    shader.setDrawingDirectionAngle(directionAngle)
+    shader.setDrawingDirectionAngle(args.direction)
+    
     if svgTree is not None:
-        penData = parseSVG(svgTree, tolerance=tolerance, shader=shader, strokeAll=strokeAll, pens=pens, extractColor=extractColor)
+        penData = parseSVG(svgTree, tolerance=args.tolerance, shader=shader, strokeAll=args.stroke_all, pens=args.pens, extractColor=args.extract_color if args.extract_color != False else None)
     else:
-        penData = parseHPGL(data, dpi=dpi)
+        penData = parseHPGL(data, dpi=args.input_dpi)
     penData = removePenBob(penData)
-
-    if doDedup:
+    
+    if args.deduplicate:
         penData = dedup(penData)
-
+        
     if sortPaths:
         for pen in penData:
             penData[pen] = safeSorted(penData[pen], comparison=comparePaths)
         penData = removePenBob(penData)
-
-    if optimizationTime > 0. and directionAngle is None:
+        
+    if optimizationTime > 0. and args.direction is None:
         for pen in penData:
-            penData[pen] = anneal.optimize(penData[pen], timeout=optimizationTime/2., quiet=quiet)
+            penData[pen] = anneal.optimize(penData[pen], timeout=optimizationTime/2., quiet=args.quiet)
         penData = removePenBob(penData)
-
-    if toolOffset > 0. or overcut > 0.:
+    
+    if args.tool_offset > 0. or args.overcut > 0.:
         if scalingMode != SCALE_NONE:
             sys.stderr.write("Scaling with tool-offset > 0 will produce unpredictable results.\n")
-        op = OffsetProcessor(toolOffset=toolOffset, overcut=overcut, tolerance=tolerance)
+        op = OffsetProcessor(toolOffset=args.tool_offset, overcut=args.overcut, tolerance=args.tolerance)
         for pen in penData:
             penData[pen] = op.processPath(penData[pen])
+    
 
-    if directionAngle is not None:
+    if args.direction is not None:
         for pen in penData:
-            penData[pen] = directionalize(penData[pen], directionAngle)
+            penData[pen] = directionalize(penData[pen], args.direction)
         penData = removePenBob(penData)
-
+        
     if len(penData) > 1:
         sys.stderr.write("Uses the following pens:\n")
         for pen in sorted(penData):
-            sys.stderr.write(describePen(pens, pen)+"\n")
-
-    if hpglOut and not svgSimulation:
-        g = emitHPGL(penData, pens=pens)
+            sys.stderr.write(describePen(args.pens, pen)+"\n")
+            
+    if args.hpgl_out and not args.simulation:
+        g = emitHPGL(penData, pens=args.pens)
     else:
-        g = emitGcode(penData, align=align, scalingMode=scalingMode, tolerance=tolerance,
-                plotter=plotter, gcodePause=gcodePause, pens=pens, pauseAtStart=pauseAtStart, simulation=svgSimulation)
 
-    if g:
-        dump = True
+        g = emitGcode(penData, align=args.align, scalingMode=scalingMode, tolerance=args.tolerance,
+                plotter=plotter, gcodePause=args.gcode_pause, pens=args.pens, pauseAtStart=args.pause_at_start, simulation=args.simulation, quiet=args.quiet)
 
-        if sendPort is not None and not svgSimulation:
-            import gcodeplotutils.sendgcode as sendgcode
-
-            dump = sendAndSave
-
-            if hpglOut:
-                sendgcode.sendHPGL(port=sendPort, speed=sendSpeed, commands=g)
-            else:
-                sendgcode.sendGcode(port=sendPort, speed=sendSpeed, commands=g, gcodePause=gcodePause, plotter=plotter, variables=plotter.variables, formulas=plotter.formulas)
-
-        if dump:
-            if hpglOut:
-                sys.stdout.write(g)
-            else:
-                if moonraker != "":
-  
- 
-                    moonraker = moonraker.strip("/") + "/server/files/upload"
-                        
-                    filtered = '\n'.join(fixComments(plotter, g, comment=plotter.comment)) + '\n'
-                    
-                    virtual_file = io.BytesIO(filtered.encode('utf-8'))
-
-                    files = {'file': (moonrakerFilename, virtual_file), 'print': moonrakerAutoprint}
-                    response = requests.post(moonraker, files=files)
-                    if response.status_code != 201:
-                        sys.stderr.write(f"Error uploading file. Status code: {response.status_code}")
-
-                    print('\n'.join(fixComments(plotter, g, comment=plotter.comment)))
-                    
-                else:
-                    print('\n'.join(fixComments(plotter, g, comment=plotter.comment)))
-
-    else:
+    if not g:
         sys.stderr.write("No points.")
         sys.exit(1)
 
+
+    dump = True
+    
+    if sendPort is not None and not args.simulation:
+        import gcodeplotutils.sendgcode as sendgcode
+        
+        dump = sendAndSave
+        
+        if args.hpgl_out: 
+            sendgcode.sendHPGL(port=sendPort, speed=args.send_speed, commands=g)
+        else:
+            sendgcode.sendGcode(port=sendPort, speed=args.send_speed, commands=g, gcodePause=args.gcode_pause, plotter=plotter, variables=plotter.variables, formulas=plotter.formulas)
+    
+    if not dump:
+        sys.exit(0)
+     
+
+    if args.hpgl_out:
+        sys.stdout.write(g)
+        sys.exit(0)
+    
+    filtered = '\n'.join(fixComments(plotter, g, comment=plotter.comment)) + '\n' 
+    if args.moonraker != "" and args.moonraker is not None:         
+        moonraker = args.moonraker.strip("/") + "/server/files/upload"          
+            
+        virtual_file = io.BytesIO(filtered.encode('utf-8'))
+        files = {'file': (args.moonraker_filename, virtual_file), 'print': args.moonraker_autoprint}
+        response = requests.post(moonraker, files=files)
+        if response.status_code != 201:
+            sys.stderr.write(f"Error uploading file. Status code: {response.status_code}")
+
+    print('\n'.join(fixComments(plotter, g, comment=plotter.comment)))
+   
