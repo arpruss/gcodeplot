@@ -850,10 +850,49 @@ def parse_svg_file(data):
         return None
 
 
+
+def generate_pen_data(svgTree, data, args, sortPaths, optimizationTime, shader:Shader):
+    penData = None
+    
+    if svgTree is not None:
+        penData = parseSVG(svgTree, tolerance=args.tolerance, shader=shader, strokeAll=args.stroke_all, pens=args.pens, extractColor=args.extract_color if args.extract_color is not False else None)
+    else:
+        penData = parseHPGL(data, dpi=args.input_dpi)
+        
+    penData = removePenBob(penData)
+    
+    if args.deduplicate: 
+        penData = dedup(penData)
+        
+    if sortPaths and penData:
+        penData = {pen: safeSorted(paths, comparison=comparePaths) for pen, paths in penData.items()}
+        penData = removePenBob(penData)
+        
+    if optimizationTime > 0. and args.direction is None and penData:
+        penData = {pen: anneal.optimize(paths, timeout=optimizationTime/2., quiet=args.quiet) for pen, paths in penData.items()}
+        penData = removePenBob(penData)
+    
+    if (args.tool_offset > 0. or args.overcut > 0.) and penData:
+        if args.scalingMode != SCALE_NONE:
+            sys.stderr.write("Scaling with tool-offset > 0 will produce unpredictable results.\n")
+        op = OffsetProcessor(toolOffset=args.tool_offset, overcut=args.overcut, tolerance=args.tolerance)
+        penData = {pen: op.processPath(paths) for pen, paths in penData.items()}
+
+    if args.direction is not None and penData:
+        penData = {pen: directionalize(paths, args.direction) for pen, paths in penData.items()}
+        penData = removePenBob(penData)
+        
+    if len(penData) > 1 and penData:
+        sys.stderr.write("Uses the following pens:\n")
+        for pen in sorted(penData):
+            sys.stderr.write(describePen(args.pens, pen)+"\n")
+            
+                
+            
 if __name__ == '__main__':
         
     argparser = argparse.ArgumentParser(prog='Gcode Plot', description='test', fromfile_prefix_chars='$', epilog="You can load options from a text file by passing the filename prefixed with a '$' e.g. [python gcodeplot.py $'args.txt']", formatter_class=argparse.ArgumentDefaultsHelpFormatter)  
-    args, rem = parse_arguments(argparser)
+    args, positional = parse_arguments(argparser)
 
     sendPort = args.send if args.send is not None else args.send_and_save
     sendAndSave = args.send_and_save is not None
@@ -862,25 +901,25 @@ if __name__ == '__main__':
     sortPaths = False if optimizationTime > 0 else args.sort 
    
     plotter = Plotter(xyMin=tuple((args.min_x if args.min_x is not None else args.area[0], args.min_y if args.min_y is not None else args.area[1])),
-                    xyMax=tuple((args.max_x if args.max_x is not None else args.area[2], args.max_y if args.max_y is not None else args.area[3])),
-                    drawSpeed=args.pen_down_speed,
-                    moveSpeed=args.pen_up_speed,
-                    zSpeed=args.z_speed,
-                    workZ=args.work_z,
-                    liftDeltaZ=args.lift_delta_z,
-                    safeDeltaZ=args.safe_delta_z,
-                    liftCommand=args.lift_command,
-                    safeLiftCommand=None,
-                    downCommand=args.down_command,
-                    initCode=args.init_code,
-                    endCode=args.end_code,
-                    comment=args.comment_delimiters)
+                      xyMax=tuple((args.max_x if args.max_x is not None else args.area[2], args.max_y if args.max_y is not None else args.area[3])),
+                      drawSpeed=args.pen_down_speed,
+                      moveSpeed=args.pen_up_speed,
+                      zSpeed=args.z_speed,
+                      workZ=args.work_z,
+                      liftDeltaZ=args.lift_delta_z,
+                      safeDeltaZ=args.safe_delta_z,
+                      liftCommand=args.lift_command,
+                      safeLiftCommand=None,
+                      downCommand=args.down_command,
+                      initCode=args.init_code,
+                      endCode=args.end_code,
+                      comment=args.comment_delimiters)
     
     shader = Shader(unshadedThreshold=args.shading_threshold,
-                   lightestSpacing=args.shading_lightest,
-                   darkestSpacing=args.shading_darkest,
-                   angle=args.shading_angle,
-                   crossHatch=args.shading_crosshatch)
+                    lightestSpacing=args.shading_lightest,
+                    darkestSpacing=args.shading_darkest,
+                    angle=args.shading_angle,
+                    crossHatch=args.shading_crosshatch)
 
     if args.tool_mode == 'cut':
         shader.unshadedThreshold = 0
@@ -893,7 +932,7 @@ if __name__ == '__main__':
 
     plotter.updateVariables()
     
-    if len(rem) == 0:
+    if len(positional) == 0:
         if not args.pause_at_start:
             argparser.print_help()
         if sendPort is None: 
@@ -904,49 +943,15 @@ if __name__ == '__main__':
         sendgcode.sendGcode(port=sendPort, speed=args.send_speed, commands=gcodeHeader(plotter) + [args.gcode_pause], gcodePause=args.gcode_pause, variables=plotter.variables, formulas=plotter.formulas)
         sys.exit(0)
         
-    with open(rem[0], 'r') as f: #TODO: Change this back to 'r' instead of binary if Inkscape works
+    with open(positional[0], 'r') as f:
         data = f.read()
     
     svgTree = parse_svg_file(data)
 
     shader.setDrawingDirectionAngle(args.direction)
     
-    if svgTree is not None:
-        penData = parseSVG(svgTree, tolerance=args.tolerance, shader=shader, strokeAll=args.stroke_all, pens=args.pens, extractColor=args.extract_color if args.extract_color != False else None)
-    else:
-        penData = parseHPGL(data, dpi=args.input_dpi)
-    penData = removePenBob(penData)
-    
-    if args.deduplicate:
-        penData = dedup(penData)
-        
-    if sortPaths:
-        for pen in penData:
-            penData[pen] = safeSorted(penData[pen], comparison=comparePaths)
-        penData = removePenBob(penData)
-        
-    if optimizationTime > 0. and args.direction is None:
-        for pen in penData:
-            penData[pen] = anneal.optimize(penData[pen], timeout=optimizationTime/2., quiet=args.quiet)
-        penData = removePenBob(penData)
-    
-    if args.tool_offset > 0. or args.overcut > 0.:
-        if scalingMode != SCALE_NONE:
-            sys.stderr.write("Scaling with tool-offset > 0 will produce unpredictable results.\n")
-        op = OffsetProcessor(toolOffset=args.tool_offset, overcut=args.overcut, tolerance=args.tolerance)
-        for pen in penData:
-            penData[pen] = op.processPath(penData[pen])
-    
+    penData = generate_pen_data(svgTree, data, args, sortPaths, optimizationTime, shader)
 
-    if args.direction is not None:
-        for pen in penData:
-            penData[pen] = directionalize(penData[pen], args.direction)
-        penData = removePenBob(penData)
-        
-    if len(penData) > 1:
-        sys.stderr.write("Uses the following pens:\n")
-        for pen in sorted(penData):
-            sys.stderr.write(describePen(args.pens, pen)+"\n")
             
     if args.hpgl_out and not args.simulation:
         g = emitHPGL(penData, pens=args.pens)
