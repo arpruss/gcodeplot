@@ -807,7 +807,7 @@ def parse_arguments(argparser:argparse.ArgumentParser):
     argparser.add_argument('-L', '--stroke-all', action=argparse.BooleanOptionalAction, default=False, help='stroke even regions specified by SVG to have no stroke')
     argparser.add_argument('-O', '--shading-avoid-outline', action=argparse.BooleanOptionalAction, default=False, help='avoid going over outline twice when shading') #?Unused
     
-    argparser.add_argument('-e', '--direction', metavar='ANGLE', default=None, type=float, help='for slanted pens: prefer to draw in given direction (degrees; 0=positive x, 90=positive y, -1=no preferred direction) [default none]')
+    argparser.add_argument('-e', '--direction', metavar='ANGLE', default=None, type=lambda value: None if value.lower() == 'none' else float(value), help='for slanted pens: prefer to draw in given direction (degrees; 0=positive x, 90=positive y, none=no preferred direction) [default none]')
     
     argparser.add_argument('-o', '--optimization-time', metavar='T', default=60, type=int, help='max time to spend optimizing (seconds; set to 0 to turn off optimization) [default 60]')
     argparser.add_argument('-d', '--sort', action=argparse.BooleanOptionalAction, default=False, help='sort paths from inside to outside for cutting [default off]')
@@ -859,8 +859,7 @@ if __name__ == '__main__':
     sendAndSave = args.send_and_save is not None
     scalingMode = parse_alignment(args.scale, enumMode=True)
     optimizationTime = 0 if args.sort else args.optimization_time
-    sortPaths = False if optimizationTime > 0 else args.sort
-    # directionAngle = args.direction  #TODO: go back to the argument and replace "-1" with "none" using type=lamba allocation 
+    sortPaths = False if optimizationTime > 0 else args.sort 
    
     plotter = Plotter(xyMin=tuple((args.min_x if args.min_x is not None else args.area[0], args.min_y if args.min_y is not None else args.area[1])),
                     xyMax=tuple((args.max_x if args.max_x is not None else args.area[2], args.max_y if args.max_y is not None else args.area[3])),

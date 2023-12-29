@@ -70,7 +70,7 @@
       <param name="boolean-shading-crosshatch" type="bool" _gui-text="Crosshatching" _gui-description="Crosshatching when shading">false</param>
       <param name="optimization-time" type="int" min="0" max="600" precision="1" _gui-text="Optimization time (sec.):" _gui-description="Maximum amount of time to spend optimizing pen movement (typical is half of it).">60</param>
       <param name="direction" type="enum" _gui-text="Preferred drawing direction (degrees):" _gui-description="If specified, the plotter will avoid moving against this direction. Currently not compatible with optimization. (Default: none)">
-        <item value="-1">none</item>
+        <item value="none">none</item>
         <item value="0">0 (positive x)</item>
         <item value="45">45</item>
         <item value="90">90 (positive y)</item>
