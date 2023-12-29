@@ -852,7 +852,7 @@ def parse_svg_file(data):
 
 
 
-def generate_pen_data(svgTree, data, args, sortPaths, optimizationTime, scalingMode, shader:Shader):
+def generate_pen_data(svgTree, data, args, scalingMode, shader:Shader):
     penData = {}
     
     if svgTree is not None:
@@ -865,12 +865,12 @@ def generate_pen_data(svgTree, data, args, sortPaths, optimizationTime, scalingM
     if args.deduplicate: 
         penData = dedup(penData)
         
-    if sortPaths and penData:
+    if args.sort and penData:
         penData = {pen: safeSorted(paths, comparison=comparePaths) for pen, paths in penData.items()}
         penData = removePenBob(penData)
         
-    if optimizationTime > 0. and args.direction is None and penData:
-        penData = {pen: anneal.optimize(paths, timeout=optimizationTime/2., quiet=args.quiet) for pen, paths in penData.items()}
+    if args.optimization_time > 0. and args.direction is None and penData:
+        penData = {pen: anneal.optimize(paths, timeout=args.optimization_time/2., quiet=args.quiet) for pen, paths in penData.items()}
         penData = removePenBob(penData)
     
     if (args.tool_offset > 0. or args.overcut > 0.) and penData:
@@ -898,8 +898,8 @@ if __name__ == '__main__':
     sendPort = args.send if args.send is not None else args.send_and_save
     sendAndSave = args.send_and_save is not None
     scalingMode = parse_alignment(args.scale, enumMode=True)
-    optimizationTime = 0 if args.sort else args.optimization_time
-    sortPaths = False if optimizationTime > 0 else args.sort 
+    args.optimization_time = 0 if args.sort else args.optimization_time
+    args.sort  = False if args.optimization_time > 0 else args.sort 
    
     plotter = Plotter(xyMin=tuple((args.min_x if args.min_x is not None else args.area[0], args.min_y if args.min_y is not None else args.area[1])),
                       xyMax=tuple((args.max_x if args.max_x is not None else args.area[2], args.max_y if args.max_y is not None else args.area[3])),
@@ -924,12 +924,12 @@ if __name__ == '__main__':
 
     if args.tool_mode == 'cut':
         shader.unshadedThreshold = 0
-        optimizationTime = 0
-        sortPaths = True
+        args.optimization_time = 0
+        args.sort = True
         args.direction = None
     elif args.tool_mode == 'draw':
         args.tool_offset = 0.
-        sortPaths = False
+        args.sort = False
 
     plotter.updateVariables()
     
@@ -951,7 +951,7 @@ if __name__ == '__main__':
     svgTree = parse_svg_file(data)
     shader.setDrawingDirectionAngle(args.direction)
     
-    penData = generate_pen_data(svgTree, data, args, sortPaths, optimizationTime, scalingMode, shader)
+    penData = generate_pen_data(svgTree, data, args, scalingMode, shader)
 
             
     if args.hpgl_out and not args.simulation:
