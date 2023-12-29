@@ -8,6 +8,8 @@ import xml.etree.ElementTree as ET
 import gcodeplotutils.anneal as anneal
 import svgpath.parser as parser
 import cmath
+import requests
+import io
 from random import sample
 from svgpath.shader import Shader
 from gcodeplotutils.processoffset import OffsetProcessor
@@ -690,6 +692,7 @@ def fixComments(plotter, data, comment = ";"):
                 out.append(line)
     return out
 
+
 if __name__ == '__main__':
 
     def help(error=False):
@@ -771,6 +774,9 @@ if __name__ == '__main__':
     comment = ";"
     sendAndSave = False
     directionAngle = None
+    moonraker = ""
+    moonrakerFilename = ""
+    moonrakerAutoprint = "false"
     
     def maybeNone(a):
         return None if a=='none' else a
@@ -784,7 +790,7 @@ if __name__ == '__main__':
                         'shading-angle=', 'shading-crosshatch', 'no-shading-crosshatch', 'shading-avoid-outline',
                         'pause-at-start', 'no-pause-at-start', 'min-x=', 'max-x=', 'min-y=', 'max-y=',
                         'no-shading-avoid-outline', 'shading-darkest=', 'shading-lightest=', 'stroke-all', 'no-stroke-all', 'gcode-pause', 'dump-options', 'tab=', 'extract-color=', 'sort', 'no-sort', 'simulation', 'no-simulation', 'tool-offset=', 'overcut=',
-                        'boolean-shading-crosshatch=', 'boolean-sort=', 'tool-mode=', 'send-and-save=', 'direction=', 'lift-command=', 'down-command=',
+                        'boolean-shading-crosshatch=', 'boolean-sort=', 'tool-mode=', 'send-and-save=', 'moonraker=', 'moonraker-filename=', 'moonraker-autoprint=','direction=', 'lift-command=', 'down-command=',
                         'init-code=', 'comment-delimiters=', 'end-code=' ], )
 
         if len(args) + len(opts) == 0:
@@ -847,6 +853,12 @@ if __name__ == '__main__':
                 sendPort = None if len(arg.strip()) == 0 else arg
                 if sendPort is not None:
                     sendAndSave = True
+            elif opt== '--moonraker':
+                moonraker = None if len(arg.strip()) == 0 else arg
+            elif opt== '--moonraker-filename':
+                moonrakerFilename = "Inkscape.gcode" if len(arg.strip()) == 0 else arg.strip(".gcode") + ".gcode"
+            elif opt== '--moonraker-autoprint':
+                moonrakerAutoprint = arg
             elif opt == '--no-send':
                 sendPort = None
             elif opt in ('-S', '--send-speed'):
@@ -1069,7 +1081,7 @@ if __name__ == '__main__':
         sendgcode.sendGcode(port=sendPort, speed=sendSpeed, commands=gcodeHeader(plotter) + [gcodePause], gcodePause=gcodePause, variables=plotter.variables, formulas=plotter.formulas)
         sys.exit(0)
 
-    with open(args[0]) as f:
+    with open(args[0], 'r') as f:
         data = f.read()
 
     svgTree = None
@@ -1145,7 +1157,24 @@ if __name__ == '__main__':
             if hpglOut:
                 sys.stdout.write(g)
             else:
-                print('\n'.join(fixComments(plotter, g, comment=plotter.comment)))
+                if moonraker != "":
+  
+ 
+                    moonraker = moonraker.strip("/") + "/server/files/upload"
+                        
+                    filtered = '\n'.join(fixComments(plotter, g, comment=plotter.comment)) + '\n'
+                    
+                    virtual_file = io.BytesIO(filtered.encode('utf-8'))
+
+                    files = {'file': (moonrakerFilename, virtual_file), 'print': moonrakerAutoprint}
+                    response = requests.post(moonraker, files=files)
+                    if response.status_code != 201:
+                        sys.stderr.write(f"Error uploading file. Status code: {response.status_code}")
+
+                    print('\n'.join(fixComments(plotter, g, comment=plotter.comment)))
+                    
+                else:
+                    print('\n'.join(fixComments(plotter, g, comment=plotter.comment)))
 
     else:
         sys.stderr.write("No points.")

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
-  <_name>GcodePlot</_name>
+  <name>GcodePlot</name>
   <id>mobi.omegacentauri.gcodeplot</id>
   <dependency type="extension">org.inkscape.output.svg.inkscape</dependency>
   <dependency type="executable" location="extensions">gcodeplot.py</dependency>
@@ -22,23 +22,7 @@
       <param name="pen-up-speed" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Movement speed (mm/s):" _gui-description="Speed  moving with pen up (Default: 40)">40</param>
       <param name="pen-down-speed" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Draw speed (mm/s):" _gui-description="Speed moving with pen down (Default: 35)">35</param>
       <param name="z-speed" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Z-speed (mm/s):" _gui-description="Speed moving pen up/down (Default: 5)">5</param>
-      <param name="send-and-save" type="string" _gui-text="Serial port to send gcode to (blank not to send)" _gui-description="If you enter the name of your serial port here (e.g., COM4), then you can directly send the file to your device."></param>
-      <param name="send-speed" type="enum" _gui-text="Serial baud rate:" _gui-description="Baud rate of your serial device (Default: 115200)">
-        <item value="115200">115200</item>
-        <item value="300">300</item>
-        <item value="600">600</item>
-        <item value="1200">1200</item>
-        <item value="2400">2400</item>
-        <item value="4800">4800</item>
-        <item value="9600">9600</item>
-        <item value="14400">14400</item>
-        <item value="19200">19200</item>
-        <item value="28800">28800</item>
-        <item value="38400">38400</item>
-        <item value="56000">56000</item>
-        <item value="57600">57600</item>
-        <item value="115200">115200</item>
-      </param>
+
     </page>
     <page name="fitting" _gui-text="Fitting and Extracting">
       <param name="scale" type="enum" _gui-text="Scaling mode:" _gui-description="Method for scaling to print area (Default: none; should be 'none' if tool-offset option is set in cutter tab)">
@@ -86,12 +70,43 @@
       <param name="lift-command" type="string" _gui-text="Lift Command" _gui-description="Gcode command to lift the pen/blade"></param>
       <param name="down-command" type="string" _gui-text="Down Command" _gui-description="Gcode command to lower the pen/blade"></param>
     </page>
+    <page name="connectionSettings" _gui-text="Connection Settings">
+
+      <label>Moonraker API</label>
+      <spacer/>
+        <param name="moonraker" type="string" _gui-text="Moonraker URL (leave blank if not used)" _gui-description="Enter the Moonraker API URL here to directly send gcode to your 3D Printer over the network."></param>
+        <param name="moonraker-filename" type="string" _gui-text="File name" _gui-description="Choose a name for the file to be uploaded.">Inkscape.gcode</param>
+        <param name="moonraker-autoprint" type="bool" _gui-text="Start job automatically after upload" _gui-description="Automatically starts running the gcode once the file is saved">false</param>
+      <spacer/>
+      <separator/>
+      <spacer/>
+      <label>Serial Configuration</label>
+      <spacer/>
+      <param name="send-and-save" type="string" _gui-text="Serial Port (leave blank if not used)" _gui-description="If you enter the name of your serial port here (e.g., COM4), then you can directly send the file to your device."></param>
+      <param name="send-speed" type="enum" _gui-text="Serial baud rate:" _gui-description="Baud rate of your serial device (Default: 115200)">
+        <item value="115200">115200</item>
+        <item value="300">300</item>
+        <item value="600">600</item>
+        <item value="1200">1200</item>
+        <item value="2400">2400</item>
+        <item value="4800">4800</item>
+        <item value="9600">9600</item>
+        <item value="14400">14400</item>
+        <item value="19200">19200</item>
+        <item value="28800">28800</item>
+        <item value="38400">38400</item>
+        <item value="56000">56000</item>
+        <item value="57600">57600</item>
+        <item value="115200">115200</item>
+      </param>
+    
+    </page>
   </param>
   <output>
     <extension>.gcode</extension>
     <mimetype>text/plain</mimetype>
-    <_filetypename>3-axis gcode plotter (*.gcode)</_filetypename>
-    <_filetypetooltip>Export 3-axis gcode plotter file</_filetypetooltip>
+    <filetypename>3-axis gcode plotter (*.gcode)</filetypename>
+    <filetypetooltip>Export 3-axis gcode plotter file</filetypetooltip>
     <dataloss>true</dataloss>
   </output>
   <script>
