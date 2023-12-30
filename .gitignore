@@ -1,3 +1,4 @@
 /svgpath/__pycache__/
 *.pyc
 /test
+gcodeplot_orig.py
