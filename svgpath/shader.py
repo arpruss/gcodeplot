@@ -11,7 +11,7 @@ class Shader(object):
         self.darkestSpacing = darkestSpacing
         self.angle = angle
         self.secondaryAngle = angle + 90
-        self.crossHatch = False
+        self.crossHatch = crossHatch
         
     def isActive(self):
         return self.unshadedThreshold > 0.000001
