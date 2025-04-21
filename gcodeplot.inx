@@ -1,51 +1,47 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
-  <_name>GcodePlot</_name>
+  <name>GcodePlot</name>
   <id>mobi.omegacentauri.gcodeplot</id>
   <dependency type="extension">org.inkscape.output.svg.inkscape</dependency>
   <dependency type="executable" location="extensions">gcodeplot.py</dependency>
   <param name="tab" type="notebook">
     <page name="general" _gui-text="General Settings ">
-      <param name="tool-mode" type="enum" _gui-text="Tool mode:" _gui-description="In draw mode, tool offset, overcut and inside-out sorting settings are ignored. In cut mode, shading, optimization and direction are always disabled and inside-out sorting is always enabled. In custom mode, one can mix and match these.">
-        <item value="draw">drawing</item>
-        <item value="cut">cutting</item>
-        <item value="custom">custom</item>
+      <param name="tool-mode" type="optiongroup" _gui-text="Tool mode:" appearance="combo" _gui-description="In draw mode, tool offset, overcut and inside-out sorting settings are ignored. In cut mode, shading, optimization and direction are always disabled and inside-out sorting is always enabled. In custom mode, one can mix and match these.">
+        <option value="draw">Drawing</item>
+        <option value="cut">Cutting</item>
+        <option value="custom">Custom</item>
       </param>
       <param name="tolerance" type="float" min="0.0001" max="10.0" precision="3" _gui-text="Precision (mm):" _gui-description="Set rendering precision (Default: 0.05)">0.05</param>
-      <param name="min-x" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Left x-coordinate (mm):" _gui-description="x-coordinate of the print area's left edge (Default: 0)">0</param>
-      <param name="min-y" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Lower y-coordinate (mm):" _gui-description="y-coordinate of the print area's lower edge (Default: 0)">0</param>
-      <param name="max-x" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Right x-coordinate (mm):" _gui-description="x-coordinate of the print area's right edge (Default: 200)">200</param>
-      <param name="max-y" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Upper y-coordinate (mm):" _gui-description="y-coordinate of the print area's upper edge (Default: 200)">200</param>
-      <param name="work-z" type="float" min="-1000000" max="1000000" precision="2" _gui-text="Work z-coordinate (mm):" _gui-description="z-coordinate for drawing/cutting (Default: 15)">15</param>
-      <param name="lift-delta-z" type="float" min="-1000000" max="1000000" precision="2" _gui-text="Lift z-height (mm):" _gui-description="height to lift pen/knife for movement (Default: 4)">4</param>
-      <param name="safe-delta-z" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Parking z-height (mm):" _gui-description="height to lift pen/knife for safe parking (Default: 20)">20</param>
-      <param name="pen-up-speed" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Movement speed (mm/s):" _gui-description="Speed  moving with pen up (Default: 40)">40</param>
-      <param name="pen-down-speed" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Draw speed (mm/s):" _gui-description="Speed moving with pen down (Default: 35)">35</param>
-      <param name="z-speed" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Z-speed (mm/s):" _gui-description="Speed moving pen up/down (Default: 5)">5</param>
-      <param name="rel-code" type="bool" _gui-text="Generate relative GCode" _gui-description="Use relavite moves">false</param>
-      <param name="send-and-save" type="string" _gui-text="Serial port to send gcode to (blank not to send)" _gui-description="If you enter the name of your serial port here (e.g., COM4), then you can directly send the file to your device."></param>
-      <param name="send-speed" type="enum" _gui-text="Serial baud rate:" _gui-description="Baud rate of your serial device (Default: 115200)">
-        <item value="115200">115200</item>
-        <item value="300">300</item>
-        <item value="600">600</item>
-        <item value="1200">1200</item>
-        <item value="2400">2400</item>
-        <item value="4800">4800</item>
-        <item value="9600">9600</item>
-        <item value="14400">14400</item>
-        <item value="19200">19200</item>
-        <item value="28800">28800</item>
-        <item value="38400">38400</item>
-        <item value="56000">56000</item>
-        <item value="57600">57600</item>
-        <item value="115200">115200</item>
-      </param>
+      <separator />
+      <label appearance="header">Workspace Coordinates (mm)</label>
+      <hbox>
+        <label indent="1" >Origin:</label>
+        <spacer size="expand"/>
+        <param name="min-x" type="float" min="-1000000" max="1000000" precision="1" _gui-text="X:" _gui-description="x-coordinate of the print area's left edge (Default: 0)">0</param>
+        <param name="min-y" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Y:" _gui-description="y-coordinate of the print area's lower edge (Default: 0)">0</param>
+      </hbox>
+      <hbox>
+        <label indent="1" >Size:</label>
+        <spacer size="expand"/>
+        <param name="max-x" type="float" min="-1000000" max="1000000" precision="1" _gui-text="X:" _gui-description="x-coordinate of the print area's right edge (Default: 200)">200</param>
+        <param name="max-y" type="float" min="-1000000" max="1000000" precision="1" _gui-text="Y:" _gui-description="y-coordinate of the print area's upper edge (Default: 200)">200</param>
+      </hbox>
+      <param name="work-z" type="float" min="-1000000" max="1000000" indent="1" precision="2" _gui-text="Working Z-Height:" _gui-description="z-coordinate for drawing/cutting (Default: 15)">15</param>
+      <param name="lift-delta-z" type="float" min="-1000000" max="1000000" indent="1" precision="2" _gui-text="Lift Z-height:" _gui-description="height to lift tool for movement (Default: 4)">4</param>
+      <param name="safe-delta-z" type="float" min="-1000000" max="1000000" indent="1" precision="1" _gui-text="Parking Z-height:" _gui-description="height to lift tool for safe parking (Default: 20)">20</param>
+      <separator />
+      <label appearance="header">Working Speed (mm/s)</label>
+      
+      <param name="pen-up-speed" type="int" min="1" max="500" indent="1" precision="0" appearance="full" _gui-text="Travel Speed:" _gui-description="Speed  moving with tool up (Default: 40)">40</param>
+      <param name="pen-down-speed" type="int" min="1" max="500" indent="1" precision="0" appearance="full" _gui-text="Draw Speed:" _gui-description="Speed moving with tool down (Default: 35)">35</param>
+      <param name="z-speed" type="int" min="1" max="100" indent="1" precision="0" appearance="full" _gui-text="Z-axis Speed:" _gui-description="Speed moving tool up/down (Default: 5)">5</param>
+
     </page>
     <page name="fitting" _gui-text="Fitting and Extracting">
       <param name="scale" type="enum" _gui-text="Scaling mode:" _gui-description="Method for scaling to print area (Default: none; should be 'none' if tool-offset option is set in cutter tab)">
-        <item value="none">none (needed if tool offset&gt;0)</item>
-        <item value="fit">fit</item>
-        <item value="down-only">down-only</item>
+        <item value="n">none (needed if tool offset&gt;0)</item>
+        <item value="f">fit</item>
+        <item value="d">down-only</item>
       </param>
       <param name="align-x" type="enum" _gui-text="Horizontal alignment:" _gui-description="Horizontal alignment of drawing in plotter area">
         <item value="none">none</item>
@@ -59,14 +55,19 @@
         <item value="center">center</item>
         <item value="top">right</item>
       </param>
-      <param name="extract-color" type="string" _gui-text="Extract one color from drawing" _gui-description="Put 'all' or leave blank to include all colors, red=#FF0000, green=#00FF00, blue=#0000FF."></param>
+
+      <hbox>
+      <param name="boolean-extract-color" type="bool" gui-text="Extract only one color from drawing" _gui-description="Uncheck to include all colors; otherwise, choose the color to extract."></param>
+      <spacer size="expand"/>
+      <param name="extract-color" type="color" gui-text=" " appearance="colorbutton" _gui-description="The color to extract. Alpha values are discarded"></param>
+      </hbox>
     </page>
     <page name="drawing" _gui-text="Drawing Settings">
       <param name="shading-threshold" type="float" min="0" max="1" precision="2" _gui-text="Shading threshold:" _gui-description="Shade whenever the shade is below this value, where 0=black and 1=white. To turn off shading, set to 0. (Default: 1, shade everything other than white).">1</param>
       <param name="shading-lightest" type="float" min="0" max="1000" precision="1" _gui-text="Lightest shading spacing (mm):" _gui-description="Distance between shading lines for the lightest shaded areas.">3</param>
       <param name="shading-darkest" type="float" min="0" max="1000" precision="1" _gui-text="Darkest shading spacing (mm):" _gui-description="Distance between shading lines for the darkest shaded areas.">0.5</param>
       <param name="shading-angle" type="float" min="0" max="180" precision="1" _gui-text="Shading angle (degrees)" _gui-description="Angle of shading lines">45</param>
-      <param name="boolean-shading-crosshatch" type="boolean" _gui-text="Crosshatching" _gui-description="Crosshatching when shading">0</param>
+      <param name="boolean-shading-crosshatch" type="bool" _gui-text="Crosshatching" _gui-description="Crosshatching when shading">false</param>
       <param name="optimization-time" type="int" min="0" max="600" precision="1" _gui-text="Optimization time (sec.):" _gui-description="Maximum amount of time to spend optimizing pen movement (typical is half of it).">60</param>
       <param name="direction" type="enum" _gui-text="Preferred drawing direction (degrees):" _gui-description="If specified, the plotter will avoid moving against this direction. Currently not compatible with optimization. (Default: none)">
         <item value="none">none</item>
@@ -83,16 +84,49 @@
     <page name="cutting" _gui-text="Cutting Settings">
       <param name="tool-offset" type="float" min="0" max="1000" precision="2" _gui-text="Tool offset (mm):" _gui-description="Horizontal distance from tool rotation axis to cutting tip (default: 1)">1</param>
       <param name="overcut" type="float" min="0" max="1000" precision="2" _gui-text="Overcut (mm):" _gui-description="Extra cut distance for closed curves (default: 1)">1</param>
-      <param name="boolean-sort" type="boolean" _gui-text="Inside-out sorting" _gui-description="Cut inside curves first">1</param>
+      <param name="boolean-sort" type="bool" _gui-text="Inside-out sorting" _gui-description="Cut inside curves first">true</param>
       <param name="lift-command" type="string" _gui-text="Lift Command" _gui-description="Gcode command to lift the pen/blade"></param>
       <param name="down-command" type="string" _gui-text="Down Command" _gui-description="Gcode command to lower the pen/blade"></param>
     </page>
+    <page name="connectionSettings" _gui-text="Connection Settings">
+
+      <label appearance="header">Moonraker API </label>
+      <spacer/>
+        <param name="moonraker" type="string" _gui-text="Moonraker URL (leave blank if not used): " _gui-description="Enter the Moonraker API URL here to directly send gcode to your 3D Printer over the network."></param>
+        <param name="moonraker-filename" type="string" _gui-text="File name: " _gui-description="Choose a name for the file to be uploaded.">Inkscape.gcode</param>
+
+        <spacer/>
+        <param name="moonraker-autoprint" type="bool" _gui-text="Start job automatically after upload" _gui-description="Automatically starts running the gcode once the file is saved">false</param>
+      <spacer/>
+      <separator/>
+      <spacer/>
+      <label appearance="header">Serial Configuration</label>
+      <spacer/>
+      <param name="send-and-save" type="string" _gui-text="Serial Port (leave blank if not used): " _gui-description="If you enter the name of your serial port here (e.g., COM4), then you can directly send the file to your device."></param>
+      <param name="send-speed" type="enum" _gui-text="Serial baud rate: " _gui-description="Baud rate of your serial device (Default: 115200)">
+        <item value="115200">115200</item>
+        <item value="300">300</item>
+        <item value="600">600</item>
+        <item value="1200">1200</item>
+        <item value="2400">2400</item>
+        <item value="4800">4800</item>
+        <item value="9600">9600</item>
+        <item value="14400">14400</item>
+        <item value="19200">19200</item>
+        <item value="28800">28800</item>
+        <item value="38400">38400</item>
+        <item value="56000">56000</item>
+        <item value="57600">57600</item>
+        <item value="115200">115200</item>
+      </param>
+    
+    </page>
   </param>
-  <output>
+  <output is_exported='true'>
     <extension>.gcode</extension>
     <mimetype>text/plain</mimetype>
-    <_filetypename>3-axis gcode plotter (*.gcode)</_filetypename>
-    <_filetypetooltip>Export 3-axis gcode plotter file</_filetypetooltip>
+    <filetypename>G-Code (*.gcode)</filetypename>
+    <filetypetooltip>Export 3-axis G-code plotter file</filetypetooltip>
     <dataloss>true</dataloss>
   </output>
   <script>

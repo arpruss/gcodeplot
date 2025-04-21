@@ -1,2 +1,7 @@
 /svgpath/__pycache__/
 *.pyc
+/test
+gcodeplot_orig.py
+gcodeplot.spec
+launch.json
+gcodeplot.exe

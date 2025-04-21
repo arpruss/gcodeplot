@@ -412,7 +412,7 @@ def sizeFromString(text):
 
 def rgbFromColor(colorName):
     colorName = colorName.strip().lower()
-    if colorName == 'none':
+    if colorName == 'none' or colorName == 'all' or len(colorName) == 0 or colorName == False:
         return None
     cmd = re.split(r'[\s(),]+', colorName)
     if cmd[0] == 'rgb':
@@ -429,6 +429,9 @@ def rgbFromColor(colorName):
             return (int(colorName[1],16)/15., int(colorName[2],16)/15., int(colorName[3],16)/15.)
         else:
             return (int(colorName[1:3],16)/255., int(colorName[3:5],16)/255., int(colorName[5:7],16)/255.)
+    elif colorName.isdigit():
+        hex_color = '#' + hex(int(colorName))[2:].zfill(8)
+        return rgbFromColor(hex_color)
     else:
         return SVG_COLORS[colorName]        
         
