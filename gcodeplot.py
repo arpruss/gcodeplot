@@ -760,7 +760,26 @@ def generate_HPGL_or_GCODE(penData, args, plotter):
 
 
 def parse_arguments(argparser:cArgumentParser):
-
+   
+   
+    # Pre-parse command-line arguments to identify explicitly provided arguments
+    # This is done to later add the `--config-file` argument to the parser and overwrite config file options with explicitly provided ones
+    args, unknown = argparser.parse_known_args()
+    explicit_args = []
+    for i, arg in enumerate(unknown):
+        if arg.startswith('-'):  # Check if it's an option
+            explicit_args.append(arg)
+            # Include the next variable if valid (accounts for options defined as '--option value' instead of '--option=value') if it is not a flag
+            if i + 1 < len(unknown) and not unknown[i + 1].startswith('-') and '=' not in unknown[i + 1] and "=" not in unknown[i]:
+                explicit_args.append(unknown[i + 1])
+ 
+ 
+ 
+    ######                        ######
+    ###### Begin argument parser  ######
+    ######                        ######
+ 
+    argparser.add_argument('--config-file', metavar='CONFIG', help='Read options from a configuration file. Options are parsed line by line. Lines starting with "#" are ignored. Explicitly provided options will override config file options.')
     argparser.add_argument('--dump-options', help='show current settings instead of doing anything', action=PrintDefaultsAction, nargs=0)
     
     argparser.add_argument('-r', '--allow-repeats', help='do not deduplicate paths', action=CustomBooleanAction, default=False)
@@ -829,8 +848,25 @@ def parse_arguments(argparser:cArgumentParser):
     argparser.add_argument('--send-and-save', metavar='PORT', default=False, help=argparse.SUPPRESS) #Could probably roll this into "send" and check if we're in Inkscape at the end of __main__ by using tab/quiet instead
     argparser.add_argument('--tab', dest='quiet', default=False, type=bool, help=argparse.SUPPRESS)
     
+    ######                        ######
+    ###### End of argument parser ######
+    ######                        ######
+    
+    
+    
     args, positional = argparser.parse_known_args()
     
+    # If a config file is provided, parse it
+    if args.config_file:
+        config_opts = getConfigOpts(args.config_file)
+        # Convert config options to a flat list of arguments
+        config_args = [item for sublist in config_opts for item in sublist if item is not None]
+        # Combine arguments: config_args + explicitly provided arguments
+        combined_args = config_args + list(explicit_args)
+        args = argparser.parse_args(combined_args)
+
+
+        
     # I probably shouldn't have done this. If a port is provided on SEND, use it,
     # otherwise check if it was provided on send_and_save, otherwise set SEND to None
     # If a port is provided on send_and_save, then it sets SEND to the port, then sets itself to True. 
@@ -850,7 +886,8 @@ def parse_arguments(argparser:cArgumentParser):
         args.tool_offset = 0.
         args.sort = False
 
-    
+  
+
     return args, positional
 
 
