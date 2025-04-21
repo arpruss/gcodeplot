@@ -380,9 +380,15 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
             if lift:
                 gcode.extend(processCode(lift))
             else:
+                if relCode:
+                    gcode.append('G90 ;Absolute mode for Z movement')
                 gcode.append('G00 F%.1f Z%.3f; pen park !!Zpark' % (plotter.zSpeed*60., plotter.safeUpZ))
+                if relCode:
+                    gcode.append('G91 ;Relative mode for XY movement')
 
     park()
+    if relCode:
+        gcode.append('G91 ;Relative mode for XY movement')
     if not simulation:
         gcode.append('G00 F%.1f Y%.3f; !!Ybottom' % (plotter.moveSpeed*60.,   plotter.xyMin[1]))
         gcode.append('G00 F%.1f X%.3f; !!Xleft' % (plotter.moveSpeed*60.,   plotter.xyMin[0]))
@@ -416,7 +422,11 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
                 if plotter.downCommand:
                     gcode.extend(processCode(plotter.downCommand))
                 else:
+                    if relCode:
+                        gcode.append('G90 ;Absolute mode for Z movement')
                     gcode.append('G00 F%.1f Z%.3f; pen down !!Zwork' % (plotter.zSpeed*60., plotter.workZ))
+                    if relCode:
+                        gcode.append('G91 ;Relavite mode for XY-movement')
             state.time += abs(state.curZ-plotter.workZ) / plotter.zSpeed
             state.curZ = plotter.workZ
 
@@ -433,8 +443,13 @@ def emitGcode(data, pens = {}, plotter=Plotter(), scalingMode=SCALE_NONE, align 
             else:
                 penUp(force=force)
             if not simulation:
+                x = p[0]
+                y = p[1]
+                if relCode:
+                    x -= state.curXY[0]
+                    y -= state.curXY[1]
                 gcode.append('G0%d F%.1f X%.3f Y%.3f; %s !!Xleft+%.3f Ybottom+%.3f' % (
-                    1 if down else 0, speed*60., p[0], p[1], "draw" if down else "move",
+                    1 if down else 0, speed*60., x, y, "draw" if down else "move",
                     p[0]-plotter.xyMin[0], p[1]-plotter.xyMin[1]))
             else:
                 start = state.curXY if state.curXY is not None else plotter.xyMin
